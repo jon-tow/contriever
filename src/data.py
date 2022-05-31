@@ -149,7 +149,7 @@ def build_mask(tensors):
     ids = []
     for k, x in enumerate(tensors):
         returnmasks.append(torch.tensor([1] * len(x) + [0] * (maxlength-len(x))))
-        ids.append(torch.cat((x, torch.tensor([1] * (maxlength-len(x))))))
+        ids.append(torch.cat((x, torch.tensor([0] * (maxlength-len(x))))))
     ids = torch.stack(ids, dim=0).long()
     returnmasks = torch.stack(returnmasks, dim=0).bool()
     return ids, returnmasks
