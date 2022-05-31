@@ -289,7 +289,7 @@ We evaluate mContriever on Mr. Tydi v1.1 and a cross-lingual retrieval setting d
 
 ### Mr. TyDi v1.1
 
-For multilingual evaluation on Mr. TyDi v1.1, we download datasets from <https://github.com/castorini/mr.tydi> and convert them to the BEIR format using (data_scripts/convertmrtydi2beir.py)[data_scripts/convertmrtydi2beir]. 
+For multilingual evaluation on Mr. TyDi v1.1, we download datasets from <https://github.com/castorini/mr.tydi> and convert them to the BEIR format using [data_scripts/convertmrtydi2beir.py](data_scripts/convertmrtydi2beir.py). 
 Evaluation on Swahili can be performed by doing the following:
 
 <details>
@@ -723,9 +723,9 @@ python passage_retrieval.py \
 We perform pre-training on data from CCNet and Wikipedia.
 Contriever, the English monolingual model, is trained on English data from Wikipedia and CCNet.
 mContriever, the multilingual model, is pre-trained on 29 languages using data from CCNet.
-After converting data into a text file, we tokenize and chunk it into multiple sub-files using the [`data_scripts/tokenization_script.sh`](data_scripts/tokenization_script.sh).
+After converting data into a text file, we tokenize and chunk it into multiple sub-files using [`data_scripts/tokenization_script.sh`](data_scripts/tokenization_script.sh).
 The different chunks are then loaded separately by the different processes in a distributed job.
-For mContriever, we use the option `--normalize_text` to preprocess data, this normalize certain common caracters that are not present in mBERT tokenizer.
+For mContriever, we use the option `--normalize_text` to preprocess data, this normalize certain common caracters that are not present in the mBERT tokenizer.
 
 ### Training
 [`train.py`](train.py) provides the code for the contrastive training phase of Contriever.
