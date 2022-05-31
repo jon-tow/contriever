@@ -63,20 +63,15 @@ def save(model, optimizer, scheduler, step, opt, dir_path, name):
 
 
 def load(model_class, dir_path, opt, reset_params=False):
-    #epoch_path = os.path.join(dir_path, "checkpoint", name)#str(epoch))
     epoch_path = os.path.realpath(dir_path)
-    optimizer_path = os.path.join(epoch_path, "checkpoint.pth")
-    logger.info("Loading %s" % epoch_path)
-    logger.info("loading checkpoint %s" % epoch_path)
-    checkpoint = torch.load(optimizer_path, map_location="cpu")
+    checkpoint_path = os.path.join(epoch_path, "checkpoint.pth")
+    logger.info(f"loading checkpoint {checkpoint_path}")
+    checkpoint = torch.load(checkpoint_path, map_location="cpu")
     opt_checkpoint = checkpoint["opt"]
+    state_dict = checkpoint["model"]
 
-    #model = model_class(opt_checkpoint)
-    opt_checkpoint.moco_queue = opt.moco_queue
     model = model_class(opt_checkpoint)
-    curr_state_dict = model.state_dict()
-    state_dict = {k:v if v.size()==curr_state_dict[k].size()  else  curr_state_dict[k] for k,v in zip(curr_state_dict.keys(), checkpoint['model'].values())}
-    model.load_state_dict(state_dict, strict=False)
+    model.load_state_dict(state_dict, strict=True)
     model = model.cuda() 
     step = checkpoint["step"]
     if not reset_params:
@@ -85,8 +80,6 @@ def load(model_class, dir_path, opt, reset_params=False):
         optimizer.load_state_dict(checkpoint["optimizer"])
     else:
         optimizer, scheduler = set_optim(opt, model)
-
-
 
     return model, optimizer, scheduler, opt_checkpoint, step
 
