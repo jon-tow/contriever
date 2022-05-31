@@ -723,9 +723,9 @@ python passage_retrieval.py \
 We perform pre-training on data from CCNet and Wikipedia.
 Contriever, the English monolingual model, is trained on English data from Wikipedia and CCNet.
 mContriever, the multilingual model, is pre-trained on 29 languages using data from CCNet.
-After converting data into a text file, we tokenize and chunk it into multiple sub-files using the [`data_scripts/tokenization_script.sh`](data_scripts/tokenization_script.sh).
+After converting data into a text file, we tokenize and chunk it into multiple sub-files using [`data_scripts/tokenization_script.sh`](data_scripts/tokenization_script.sh).
 The different chunks are then loaded separately by the different processes in a distributed job.
-For mContriever, we use the option `--normalize_text` to preprocess data, this normalize certain common caracters that are not present in mBERT tokenizer.
+For mContriever, we use the option `--normalize_text` to preprocess data, this normalize certain common caracters that are not present in the mBERT tokenizer.
 
 ### Training
 [`train.py`](train.py) provides the code for the contrastive training phase of Contriever.
