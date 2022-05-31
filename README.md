@@ -289,7 +289,7 @@ We evaluate mContriever on Mr. Tydi v1.1 and a cross-lingual retrieval setting d
 
 ### Mr. TyDi v1.1
 
-For multilingual evaluation on Mr. TyDi v1.1, we download datasets from <https://github.com/castorini/mr.tydi> and convert them to the BEIR format using (data_scripts/convertmrtydi2beir.py)[data_scripts/convertmrtydi2beir]. 
+For multilingual evaluation on Mr. TyDi v1.1, we download datasets from <https://github.com/castorini/mr.tydi> and convert them to the BEIR format using (data_scripts/convertmrtydi2beir.py)[data_scripts/convertmrtydi2beir.py]. 
 Evaluation on Swahili can be performed by doing the following:
 
 <details>
