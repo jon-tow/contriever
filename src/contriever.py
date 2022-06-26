@@ -60,8 +60,7 @@ def load_retriever(model_path):
     if os.path.exists(path):
         pretrained_dict = torch.load(path, map_location="cpu")
         opt = pretrained_dict['opt']
-        #retriever_model_id = opt.retriever_model_id
-        retriever_model_id = 'bert-base-multilingual-cased'
+        retriever_model_id = opt.retriever_model_id
         tokenizer = utils.load_hf(transformers.AutoTokenizer, retriever_model_id)
         cfg = utils.load_hf(transformers.AutoConfig, retriever_model_id)
         retriever = Contriever(cfg)
