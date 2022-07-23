@@ -39,10 +39,10 @@ export OMPI_MCA_btl_tcp_if_exclude="lo,docker1"
 export OMPI_MCA_btl_base_verbose=30
 export OMPI_MCA_plm_rsh_no_tree_spawn=1
 
-export HOSTNAMES=`scontrol show hostnames "$SLURM_JOB_NODELIST"`
+export HOSTNAMES=$(scontrol show hostnames "$SLURM_JOB_NODELIST")
 export MASTER_ADDR=$(scontrol show hostnames "$SLURM_JOB_NODELIST" | head -n 1)
 export MASTER_PORT=12802
-export COUNT_NODE=`scontrol show hostnames "$SLURM_JOB_NODELIST" | wc -l`
+export COUNT_NODE=$(scontrol show hostnames "$SLURM_JOB_NODELIST" | wc -l)
 
 echo "Node Count: $COUNT_NODE"
 echo "Host Names: $HOSTNAMES"
@@ -53,12 +53,12 @@ echo "Host Names: $HOSTNAMES"
 
 TRAIN_PATH=/fsx/carper/contriever
 
-wandb_project="contriever"
-wandb_entity="carperai"
+WANDB_PROJECT="contriever"
+WANDB_ENTITY="carperai"
 
-per_gpu_batch_size=16
-rmin=0.05
-rmax=0.5
+PER_GPU_BATCH_SIZE=64
+RMIN=0.05
+RMAX=0.5
 T=0.05
 QSIZE=131072
 MOM=0.9995
@@ -66,23 +66,24 @@ POOL=average
 AUG=delete
 PAUG=0.1
 LC=0.
-_mo=bert-large-uncased
-mo=${TRAIN_PATH}/configs/$_mo/
-to=bert-base-uncased
-mp=none
-proj_size=1024 # SET THIS TO HIDDEN SIZE FROM THE MODEL CONFIGS!
-name=$SLURM_JOB_ID-$POOL-rmin$rmin-rmax$rmax-T$T-$QSIZE-$MOM-$_mo-$AUG-$PAUG
+MP=none
+TO=bert-base-uncased
+_MO=bert-large-uncased
+MO=${TRAIN_PATH}/configs/$_MO/
+PROJECTION_SIZE=1024 # NOTE: Set this to hidden size from the model configs!
+EVAL_DATASETS=("nq msmarco")
+EVAL_DATASETS_DIR=${TRAIN_PATH}/BEIR/datasets/
+EVAL_FREQ=1000 # (in steps)
+NAME=$SLURM_JOB_ID-$POOL-rmin$RMIN-rmax$RMAX-T$T-$QSIZE-$MOM-$_MO-$AUG-$PAUG
 
-echo $mo
-
-OUTPUT_DIR=$TRAIN_PATH/checkpoint/pile/$name
+OUTPUT_DIR=$TRAIN_PATH/checkpoint/pile/$NAME
 # NOTE: DATA_DIR must point to the directory specified in `tokenization_pile_script.sh`
 DATA_DIR=$TRAIN_PATH/encoded-data/bert-base-uncased
 # NOTE: Uncomment the line below to test on 1 pile slice dataset
 #TRAIN_DATASETS=$DATA_DIR/pile/"00"
 TRAIN_DATASETS=""
 for i in 0{0..9} {10..29}
-do 
+do
     TRAIN_DATASETS+="${DATA_DIR}/pile/${i} "
 done
 
@@ -90,24 +91,25 @@ source $TRAIN_PATH/.env/bin/activate
 cd $TRAIN_PATH
 
 srun --cpu_bind=v --accel-bind=gn python3.8 train.py \
-        --model_path $mp \
-        --sampling_coefficient $LC \
-        --retriever_model_id $mo --pooling $POOL \
-        --retriever_tokenizer_id $to \
-        --augmentation $AUG --prob_augmentation $PAUG \
-        --train_data $TRAIN_DATASETS --loading_mode split \
-        --ratio_min $rmin --ratio_max $rmax --chunk_length 256 \
-        --momentum $MOM --moco_queue $QSIZE --temperature $T \
-        --warmup_steps 20000 --total_steps 500000 --lr 0.00005 \
-        --projection_size $proj_size \
-        --num_workers 6 \
-        --name $name \
-        --scheduler linear \
-        --optim adamw \
-        --per_gpu_batch_size $per_gpu_batch_size \
-        --output_dir  $OUTPUT_DIR \
-        --main_port $MASTER_PORT \
-        --main_addr $MASTER_ADDR \
-        --wandb_project $wandb_project \
-        --wandb_entity $wandb_entity \
-        --random_init
+    --name $NAME \
+    --model_path $MP \
+    --sampling_coefficient $LC \
+    --retriever_model_id $MO --pooling $POOL \
+    --retriever_tokenizer_id $TO \
+    --augmentation $AUG --prob_augmentation $PAUG \
+    --train_data $TRAIN_DATASETS --loading_mode split \
+    --eval_datasets $EVAL_DATASETS --eval_datasets_dir $EVAL_DATASETS_DIR --eval_freq $EVAL_FREQ \
+    --ratio_min $RMIN --ratio_max $RMAX --chunk_length 256 \
+    --momentum $MOM --queue_size $QSIZE --temperature $T \
+    --warmup_steps 20000 --total_steps 500000 --lr 0.00005 \
+    --scheduler linear \
+    --optim adamw \
+    --projection_size $PROJECTION_SIZE \
+    --per_gpu_batch_size $PER_GPU_BATCH_SIZE \
+    --num_workers 6 \
+    --output_dir $OUTPUT_DIR \
+    --main_port $MASTER_PORT \
+    --main_addr $MASTER_ADDR \
+    --wandb_project $WANDB_PROJECT \
+    --wandb_entity $WANDB_ENTITY \
+    --random_init

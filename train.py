@@ -16,7 +16,7 @@ from src import moco
 logger = logging.getLogger(__name__)
 
 
-def train(opt, model, optimizer, scheduler, step, run = None):
+def train(opt, model, optimizer, scheduler, step, wandb_run = None):
     run_stats = utils.WeightedAvgStats()
 
     logger.info("Data loading")
@@ -37,8 +37,9 @@ def train(opt, model, optimizer, scheduler, step, run = None):
         num_workers=opt.num_workers, 
         collate_fn=collator
     )
-    
+
     epoch = 1
+
     model.train()
     while step < opt.total_steps:
         train_dataset.generate_offset()
@@ -62,8 +63,8 @@ def train(opt, model, optimizer, scheduler, step, run = None):
                 log = f'{step} / {opt.total_steps}'
                 for k, v in run_stats.average_stats.items():
                     log += f' | {k}: {v:.3f}'
-                    if dist_utils.is_main():
-                        run.log({k: v}, step=step)
+                    if dist_utils.is_main() and wandb_run is not None:
+                        wandb_run.log({k: v}, step=step)
                 log += f' | lr: {scheduler.get_last_lr()[0]:0.3g}'
                 log += f' | Memory: {torch.cuda.max_memory_allocated()//1e9} GiB'
 
@@ -80,6 +81,7 @@ def train(opt, model, optimizer, scheduler, step, run = None):
                     query_encoder=encoder, 
                     doc_encoder=encoder, 
                     tokenizer=tokenizer,
+                    wandb_run=wandb_run,
                     step=step
                 )
 
@@ -95,7 +97,7 @@ def train(opt, model, optimizer, scheduler, step, run = None):
                 break
         epoch += 1
 
-def evalmodel(opt, query_encoder, doc_encoder, tokenizer, step):
+def evalmodel(opt, query_encoder, doc_encoder, tokenizer, wandb_run, step):
     for datasetname in opt.eval_datasets:
         metrics = beir_utils.evaluate_model(
             query_encoder, 
@@ -109,14 +111,15 @@ def evalmodel(opt, query_encoder, doc_encoder, tokenizer, step):
             score_function=opt.score_function,
             lower_case=opt.lower_case,
             normalize_text=opt.eval_normalize_text,
+            is_main=dist_utils.is_main(),
         )
 
         message = []
         if dist_utils.is_main():
             for metric in ['NDCG@10', 'Recall@10', 'Recall@100']:
                 message.append(f"{datasetname}/{metric}: {metrics[metric]:.2f}")
-                if dist_utils.is_main():
-                    run.add_scalar(f"{datasetname}/{metric}", metrics[metric], step)
+                if dist_utils.is_main() and wandb_run is not None:
+                    wandb_run.log({f"{datasetname}/{metric}": metrics[metric]}, step=step)
             logger.info(" | ".join(message))
 
 if __name__ == "__main__":
@@ -173,20 +176,19 @@ if __name__ == "__main__":
         )
         dist.barrier()
  
-    run = None
+    wandb_run = None
     if dist_utils.is_main():
-        run = wandb.init(
+        wandb_run = wandb.init(
             project=opt.wandb_project,
             entity=opt.wandb_entity,
             save_code=False,
             force=False,
             name=opt.name,
         )
-        # dist.barrier()
    
     logger.info("Start training")
-    train(opt, model, optimizer, scheduler, step, run)
+    train(opt, model, optimizer, scheduler, step, wandb_run)
 
     if dist_utils.is_main():
         # Make sure all processes are cleaned up
-        run.finish()
+        wandb_run.finish()
