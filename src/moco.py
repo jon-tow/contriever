@@ -22,7 +22,12 @@ class MoCo(nn.Module):
         self.norm_query = opt.norm_query
         self.moco_train_mode_encoder_k = opt.moco_train_mode_encoder_k #apply the encoder on keys in train mode
 
-        retriever, tokenizer = self._load_retriever(opt.retriever_model_id, pooling=opt.pooling, random_init=opt.random_init)
+        retriever, tokenizer = self._load_retriever(
+            opt.retriever_model_id, 
+            opt.retriever_tokenizer_id,
+            pooling=opt.pooling,
+            random_init=opt.random_init
+        )
         
         self.tokenizer = tokenizer
         self.encoder_q = retriever
@@ -38,9 +43,9 @@ class MoCo(nn.Module):
 
         self.register_buffer("queue_ptr", torch.zeros(1, dtype=torch.long))
 
-    def _load_retriever(self, model_id, pooling, random_init):
+    def _load_retriever(self, model_id, tokenizer_id, pooling, random_init=False):
         cfg = utils.load_hf(transformers.AutoConfig, model_id)
-        tokenizer = utils.load_hf(transformers.AutoTokenizer, model_id)
+        tokenizer = utils.load_hf(transformers.AutoTokenizer, tokenizer_id)
 
         if random_init:
             retriever = contriever.Contriever(cfg)
@@ -94,6 +99,7 @@ class MoCo(nn.Module):
         return logits
 
     def forward(self, q_tokens, q_mask, k_tokens, k_mask, stats_prefix='', **kwargs):
+        # TODO: contrastive parallel - accumulate the q embeddings (like gradient accumulation steps)
         iter_stats = {}
         bsz = q_tokens.size(0)
 

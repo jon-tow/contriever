@@ -4,13 +4,14 @@
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
 
-from logging import getLogger
 import os
 import sys
 import torch
 import socket
 import signal
 import subprocess
+from logging import getLogger
+from typing import Tuple
 
 
 logger = getLogger()
@@ -40,6 +41,27 @@ def init_signal_handler():
     signal.signal(signal.SIGTERM, term_handler)
 
 
+def world_info_from_env() -> Tuple[int, int, int]:
+    """Returns world info from environment variables that may be set in slurm scripts."""
+    local_rank = 0
+    for v in ('SLURM_LOCALID', 'MPI_LOCALRANKID', 'OMPI_COMM_WORLD_LOCAL_RANK', 'LOCAL_RANK'):
+        if v in os.environ:
+            local_rank = int(os.environ[v])
+            break
+    global_rank = 0
+    for v in ('SLURM_PROCID', 'PMI_RANK', 'OMPI_COMM_WORLD_RANK', 'RANK'):
+        if v in os.environ:
+            global_rank = int(os.environ[v])
+            break
+    world_size = 1
+    for v in ('SLURM_NTASKS', 'PMI_SIZE', 'OMPI_COMM_WORLD_SIZE', 'WORLD_SIZE'):
+        if v in os.environ:
+            world_size = int(os.environ[v])
+            break
+
+    return local_rank, global_rank, world_size
+
+
 def init_distributed_mode(params):
     """
     Handle single and multi-GPU / multi-node / SLURM jobs.
@@ -57,9 +79,10 @@ def init_distributed_mode(params):
         assert params.local_rank == -1   # on the cluster, this is handled by SLURM
 
         # local rank on the current node / global rank
-        params.local_rank = int(os.environ['SLURM_LOCALID'])
-        params.global_rank = int(os.environ['SLURM_PROCID'])
-        params.world_size = int(os.environ['SLURM_NTASKS'])
+        local_rank, global_rank, world_size = world_info_from_env()
+        params.local_rank = local_rank
+        params.global_rank = global_rank
+        params.world_size = world_size
 
         # define master address and master port
         hostnames = subprocess.check_output(['scontrol', 'show', 'hostnames', os.environ['SLURM_JOB_NODELIST']])
@@ -71,8 +94,8 @@ def init_distributed_mode(params):
         os.environ['MASTER_PORT'] = str(params.main_port)
         os.environ['WORLD_SIZE'] = str(params.world_size)
         os.environ['RANK'] = str(params.global_rank)
-        is_distributed = True
 
+        is_distributed = True
 
     # multi-GPU job (local or multi-node) - jobs started with torch.distributed.launch
     elif has_local_rank and params.local_rank != -1:
@@ -109,6 +132,6 @@ def init_distributed_mode(params):
         torch.distributed.init_process_group(
             init_method='env://',
             backend='nccl',
-            #world_size=params.world_size,
-            #rank=params.global_rank,
+            world_size=params.world_size,
+            rank=params.global_rank,
         )

@@ -11,6 +11,7 @@ class Options():
 
     def initialize(self):
         # basic parameters
+        self.parser.add_argument("--name", type=str)
         self.parser.add_argument('--output_dir', type=str, default='./checkpoint/my_experiments', help='models are saved here')
         self.parser.add_argument('--train_data', nargs='+', default=[], help='Data used for training, passed as a list of directories splitted into tensor files.')
         self.parser.add_argument('--eval_datasets', nargs='+', default=[], 
@@ -47,6 +48,7 @@ class Options():
         self.parser.add_argument("--ratio_max", type=float, default=0.5)
         self.parser.add_argument("--score_function", type=str, default='dot')
         self.parser.add_argument("--retriever_model_id", type=str, default='bert-base-uncased')
+        self.parser.add_argument("--retriever_tokenizer_id", type=str, default='bert-base-uncased')
         self.parser.add_argument('--pooling', type=str, default='average')
         self.parser.add_argument('--random_init', action='store_true', help='init model with random weights')
 
@@ -78,8 +80,9 @@ class Options():
                             help='evaluate model every <eval_freq> steps during training')
         self.parser.add_argument('--save_freq', type=int, default=50000) 
         self.parser.add_argument('--maxload', type=int, default=None)
+        self.parser.add_argument("--wandb_project", type=str, default='contriever')
+        self.parser.add_argument("--wandb_entity", type=str, default='carperai')
 
-                                
     def print_options(self, opt):
         message = ''
         for k, v in sorted(vars(opt).items()):

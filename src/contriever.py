@@ -61,7 +61,8 @@ def load_retriever(model_path):
         pretrained_dict = torch.load(path, map_location="cpu")
         opt = pretrained_dict['opt']
         retriever_model_id = opt.retriever_model_id
-        tokenizer = utils.load_hf(transformers.AutoTokenizer, retriever_model_id)
+        retriever_tokenizer_id = opt.retriever_tokenizer_id
+        tokenizer = utils.load_hf(transformers.AutoTokenizer, retriever_tokenizer_id)
         cfg = utils.load_hf(transformers.AutoConfig, retriever_model_id)
         retriever = Contriever(cfg)
         pretrained_dict = pretrained_dict["model"]

@@ -1,14 +1,9 @@
 # Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
 
 import os
-import time
-import sys
 import torch
 import logging
-import json
-import numpy as np
-import random
-import pickle
+import wandb
 
 import torch.distributed as dist
 from torch.utils.data import DataLoader, RandomSampler
@@ -21,19 +16,8 @@ from src import moco
 logger = logging.getLogger(__name__)
 
 
-def train(opt, model, optimizer, scheduler, step):
-
+def train(opt, model, optimizer, scheduler, step, run = None):
     run_stats = utils.WeightedAvgStats()
-
-    try:
-        from torch.utils import tensorboard
-        if dist_utils.is_main():
-            tb_logger = tensorboard.SummaryWriter(opt.output_dir)
-        else:
-            tb_logger = None
-    except:
-        logger.warning('Tensorboard is not available.')
-        tb_logger = None
 
     logger.info("Data loading")
     if isinstance(model, torch.nn.parallel.DistributedDataParallel):
@@ -53,9 +37,8 @@ def train(opt, model, optimizer, scheduler, step):
         num_workers=opt.num_workers, 
         collate_fn=collator
     )
-
+    
     epoch = 1
-
     model.train()
     while step < opt.total_steps:
         train_dataset.generate_offset()
@@ -79,8 +62,8 @@ def train(opt, model, optimizer, scheduler, step):
                 log = f'{step} / {opt.total_steps}'
                 for k, v in run_stats.average_stats.items():
                     log += f' | {k}: {v:.3f}'
-                    if tb_logger:
-                        tb_logger.add_scalar(k, v, step)
+                    if dist_utils.is_main():
+                        run.log({k: v}, step=step)
                 log += f' | lr: {scheduler.get_last_lr()[0]:0.3g}'
                 log += f' | Memory: {torch.cuda.max_memory_allocated()//1e9} GiB'
 
@@ -97,7 +80,6 @@ def train(opt, model, optimizer, scheduler, step):
                     query_encoder=encoder, 
                     doc_encoder=encoder, 
                     tokenizer=tokenizer,
-                    tb_logger=tb_logger, 
                     step=step
                 )
 
@@ -113,7 +95,7 @@ def train(opt, model, optimizer, scheduler, step):
                 break
         epoch += 1
 
-def evalmodel(opt, query_encoder, doc_encoder, tokenizer, tb_logger, step):
+def evalmodel(opt, query_encoder, doc_encoder, tokenizer, step):
     for datasetname in opt.eval_datasets:
         metrics = beir_utils.evaluate_model(
             query_encoder, 
@@ -133,7 +115,8 @@ def evalmodel(opt, query_encoder, doc_encoder, tokenizer, tb_logger, step):
         if dist_utils.is_main():
             for metric in ['NDCG@10', 'Recall@10', 'Recall@100']:
                 message.append(f"{datasetname}/{metric}: {metrics[metric]:.2f}")
-                tb_logger.add_scalar(f"{datasetname}/{metric}", metrics[metric], step)
+                if dist_utils.is_main():
+                    run.add_scalar(f"{datasetname}/{metric}", metrics[metric], step)
             logger.info(" | ".join(message))
 
 if __name__ == "__main__":
@@ -189,6 +172,21 @@ if __name__ == "__main__":
             find_unused_parameters=False,
         )
         dist.barrier()
-    
+ 
+    run = None
+    if dist_utils.is_main():
+        run = wandb.init(
+            project=opt.wandb_project,
+            entity=opt.wandb_entity,
+            save_code=False,
+            force=False,
+            name=opt.name,
+        )
+        # dist.barrier()
+   
     logger.info("Start training")
-    train(opt, model, optimizer, scheduler, step)
+    train(opt, model, optimizer, scheduler, step, run)
+
+    if dist_utils.is_main():
+        # Make sure all processes are cleaned up
+        run.finish()
