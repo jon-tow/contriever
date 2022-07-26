@@ -22,12 +22,7 @@ class MoCo(nn.Module):
         self.norm_query = opt.norm_query
         self.moco_train_mode_encoder_k = opt.moco_train_mode_encoder_k #apply the encoder on keys in train mode
 
-        retriever, tokenizer = self._load_retriever(
-            opt.retriever_model_id, 
-            opt.retriever_tokenizer_id,
-            pooling=opt.pooling,
-            random_init=opt.random_init
-        )
+        retriever, tokenizer = self._load_retriever(opt)
         
         self.tokenizer = tokenizer
         self.encoder_q = retriever
@@ -43,11 +38,12 @@ class MoCo(nn.Module):
 
         self.register_buffer("queue_ptr", torch.zeros(1, dtype=torch.long))
 
-    def _load_retriever(self, model_id, tokenizer_id, pooling, random_init):
+    def _load_retriever(self, opt):
+        model_id, tokenizer_id = opt.retriever_model_id, opt.retriever_tokenizer_id
         cfg = utils.load_hf(transformers.AutoConfig, model_id)
         tokenizer = utils.load_hf(transformers.AutoTokenizer, tokenizer_id)
 
-        if random_init:
+        if opt.random_init:
             retriever = contriever.Contriever(cfg)
         else:
             retriever = utils.load_hf(contriever.Contriever, model_id)
@@ -57,8 +53,12 @@ class MoCo(nn.Module):
                 tokenizer.bos_token = "[CLS]"
             if tokenizer.eos_token_id is None:
                 tokenizer.eos_token = "[SEP]"
+            if 'bit' in opt.optim:
+                import bitsandbytes as bnb
+                retriever.embeddings.word_embeddings = bnb.nn.StableEmbedding(
+                    retriever.config.vocab_size, retriever.config.hidden_size)
 
-        retriever.config.pooling = pooling
+        retriever.config.pooling = opt.pooling
 
         return retriever, tokenizer
 
