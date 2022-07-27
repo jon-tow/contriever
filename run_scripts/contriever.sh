@@ -55,7 +55,7 @@ python3.8 train.py \
     --momentum $MOM --queue_size $QSIZE --temperature $T \
     --warmup_steps 20000 --total_steps 500000 --lr 0.00005 \
     --scheduler linear \
-    --optim adamw8bit \
+    --optim adamw \
     --projection_size $PROJECTION_SIZE \
     --per_gpu_batch_size $PER_GPU_BATCH_SIZE \
     --num_workers 6 \
