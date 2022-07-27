@@ -1,7 +1,4 @@
 #!/bin/bash
-export HOSTNAMES=$(scontrol show hostnames "$SLURM_JOB_NODELIST")
-export MASTER_ADDR=$(scontrol show hostnames "$SLURM_JOB_NODELIST" | head -n 1)
-export MASTER_PORT=12802
 
 ###############################################################################
 # Contriever Setup
@@ -38,8 +35,7 @@ DATA_DIR=$TRAIN_PATH/encoded-data/bert-base-uncased
 # NOTE: Uncomment the line below to test on 1 pile slice dataset
 #TRAIN_DATASETS=$DATA_DIR/pile/"00"
 TRAIN_DATASETS=""
-#for i in 0{0..9} {10..29}
-for i in 0{0..4}; do
+for i in 0{0..9} {10..29}; do
     TRAIN_DATASETS+="${DATA_DIR}/pile/${i} "
 done
 
@@ -64,8 +60,5 @@ python3.8 train.py \
     --per_gpu_batch_size $PER_GPU_BATCH_SIZE \
     --num_workers 6 \
     --output_dir $OUTPUT_DIR \
-    --main_port $MASTER_PORT \
-    --main_addr $MASTER_ADDR \
     --wandb_project $WANDB_PROJECT \
-    --wandb_entity $WANDB_ENTITY \
-    --random_init
+    --wandb_entity $WANDB_ENTITY
