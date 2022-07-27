@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --time=72:00:00
-#SBATCH --job-name="contriever"
+#SBATCH --job-name="base-contriever"
 #SBATCH --partition=compute-od-gpu
 #SBATCH --cpus-per-task=6
 #SBATCH --nodes=4
@@ -68,13 +68,13 @@ PAUG=0.1
 LC=0.
 MP=none
 TO=bert-base-uncased
-_MO=bert-large-uncased
-MO=$_MO              # For custom arch config use: ${TRAIN_PATH}/configs/$_MO/
-PROJECTION_SIZE=1024 # NOTE: Set this to hidden size from the model configs!
+_MO=bert-base-uncased
+MO=$_MO
+PROJECTION_SIZE=768 # NOTE: Set this to hidden size from the model configs!
 EVAL_DATASETS=("nq msmarco")
 EVAL_DATASETS_DIR=${TRAIN_PATH}/BEIR/datasets/
 EVAL_FREQ=1000 # (in steps)
-NAME=$SLURM_JOB_ID-$POOL-rmin$RMIN-rmax$RMAX-T$T-$QSIZE-$MOM-$_MO-$AUG-$PAUG
+NAME=baseline-$SLURM_JOB_ID-$POOL-rmin$RMIN-rmax$RMAX-T$T-$QSIZE-$MOM-$_MO-$AUG-$PAUG
 
 OUTPUT_DIR=$TRAIN_PATH/checkpoint/pile/$NAME
 # NOTE: DATA_DIR must point to the directory specified in `tokenization_pile_script.sh`
