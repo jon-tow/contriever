@@ -5,6 +5,7 @@ env/*
 # Checkpoints and Misc. Data
 checkpoint/*
 encoded-data/*
+BEIR/*
 wandb/*
 
 # Byte-compiled / optimized / DLL files

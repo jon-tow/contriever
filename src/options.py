@@ -54,6 +54,7 @@ class Options():
 
         # dataset parameters
         self.parser.add_argument("--per_gpu_batch_size", default=64, type=int, help="Batch size per GPU for training.")
+        self.parser.add_argument("--micro_batch_size", default=1, type=int, help="Micro batch size per GPU for training.")
         self.parser.add_argument("--per_gpu_eval_batch_size", default=256, type=int, help="Batch size per GPU for evaluation.")
         self.parser.add_argument('--label_smoothing', type=float, default=0.)
         self.parser.add_argument('--total_steps', type=int, default=1000)

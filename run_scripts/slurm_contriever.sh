@@ -56,7 +56,8 @@ TRAIN_PATH=/fsx/carper/contriever
 WANDB_PROJECT="contriever"
 WANDB_ENTITY="carperai"
 
-PER_GPU_BATCH_SIZE=64
+PER_GPU_BATCH_SIZE=256
+MICRO_BATCH_SIZE=32
 RMIN=0.05
 RMAX=0.5
 T=0.05
@@ -105,6 +106,7 @@ srun --cpu_bind=v --accel-bind=gn python3.8 train.py \
     --optim adamw \
     --projection_size $PROJECTION_SIZE \
     --per_gpu_batch_size $PER_GPU_BATCH_SIZE \
+    --micro_batch_size $MICRO_BATCH_SIZE
     --num_workers 6 \
     --output_dir $OUTPUT_DIR \
     --main_port $MASTER_PORT \

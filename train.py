@@ -48,12 +48,18 @@ def train(opt, model, optimizer, scheduler, step, wandb_run = None):
         for i, batch in enumerate(train_dataloader):
             step += 1
 
-            batch = {key: value.cuda() if isinstance(value, torch.Tensor) else value for key, value in batch.items()}
+            # TODO (jon-tow): Don't put full batches on GPU yet (it's slow)
+            batch = {
+                key: value.cuda() 
+                if isinstance(value, torch.Tensor) else value 
+                for key, value in batch.items()
+            }
             train_loss, iter_stats = model(**batch, stats_prefix='train')
-            
-            train_loss.backward()
-            optimizer.step()
 
+            # Backwards is now called in the model forward during gradient caching.
+            # train_loss.backward()
+
+            optimizer.step()
             scheduler.step()
             model.zero_grad()
 
