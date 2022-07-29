@@ -173,14 +173,17 @@ if __name__ == "__main__":
 
     logger.info(utils.get_parameters(model))
 
-    if dist.is_initialized():
-        model = torch.nn.parallel.DistributedDataParallel(
-            model,
-            device_ids=[opt.local_rank],
-            output_device=opt.local_rank,
-            find_unused_parameters=False,
-        )
-        dist.barrier()
+    # DDP is set up in the model constructor to be able to avoid autograd errors
+    # when using multiple GPUs across two models.
+
+    # if dist.is_initialized():
+    #     model = torch.nn.parallel.DistributedDataParallel(
+    #         model,
+    #         device_ids=[opt.local_rank],
+    #         output_device=opt.local_rank,
+    #         find_unused_parameters=True,
+    #     )
+    #     dist.barrier()
  
     wandb_run = None
     if dist_utils.is_main():

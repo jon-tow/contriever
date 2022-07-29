@@ -1,4 +1,10 @@
 # Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
+"""
+NOTE:
+- We remove the option to normalize representations thereby removing `norm_query`
+and `norm_doc` attributes in the MoCo class. It complicates? representation gradient
+caching and is off by default in the original code.
+"""
 
 import torch
 import torch.nn as nn
@@ -7,6 +13,7 @@ import logging
 import copy
 import transformers
 
+from contextlib import nullcontext
 from src import contriever, dist_utils, utils
 
 logger = logging.getLogger(__name__)
@@ -19,20 +26,39 @@ class MoCo(nn.Module):
         self.momentum = opt.momentum
         self.temperature = opt.temperature
         self.label_smoothing = opt.label_smoothing
-        self.norm_doc = opt.norm_doc
-        self.norm_query = opt.norm_query
         self.moco_train_mode_encoder_k = opt.moco_train_mode_encoder_k #apply the encoder on keys in train mode
         self.micro_batch_size = opt.micro_batch_size
 
         retriever, tokenizer = self._load_retriever(opt)
         
         self.tokenizer = tokenizer
-        self.encoder_q = retriever
-        self.encoder_k = copy.deepcopy(retriever)
+
+        # Turn this off while testing
+        if dist.is_initialized():
+            self.encoder_q = torch.nn.parallel.DistributedDataParallel(
+                retriever.cuda(),
+                device_ids=[opt.local_rank],
+                output_device=opt.local_rank,
+                find_unused_parameters=True,
+            )
+            self.encoder_k = torch.nn.parallel.DistributedDataParallel(
+                copy.deepcopy(retriever).cuda(),
+                device_ids=[opt.local_rank],
+                output_device=opt.local_rank,
+                find_unused_parameters=False,
+            )
+            dist.barrier()
+        else:
+            self.encoder_q = retriever
+            self.encoder_k = copy.deepcopy(retriever)
 
         for param_q, param_k in zip(self.encoder_q.parameters(), self.encoder_k.parameters()):
             param_k.data.copy_(param_q.data)
             param_k.requires_grad = False 
+
+        if dist.is_initialized():
+            self.world_size = dist.get_world_size()
+            self.rank = dist.get_rank()
 
         # create the queue
         self.register_buffer("queue", torch.randn(opt.projection_size, self.queue_size))
@@ -96,42 +122,37 @@ class MoCo(nn.Module):
     def _compute_logits(self, q, k):
         l_pos = torch.einsum('nc,nc->n', [q, k]).unsqueeze(-1)
         l_neg = torch.einsum('nc,ck->nk', [q, self.queue.clone().detach()]) 
-
         logits = torch.cat([l_pos, l_neg], dim=1)
         return logits
 
-    def _split_inputs(self, inputs: torch.Tensor, size: int) -> torch.Tensor:
+    def _split_inputs(self, inputs, size):
         return list(inputs.split(size, dim=0))
 
-    def _get_query_reprs(self, encoder, inputs, masks, use_normalize):
+    def _get_query_reprs(self, inputs, masks):
         """Forward pass without gradient computation to record representations."""
         reprs = []
         with torch.no_grad():
             for input, mask in zip(inputs, masks):
-                repr = encoder(input_ids=input, attention_mask=mask)
-                if use_normalize:
-                    repr = nn.functional.normalize(repr, dim=1)
+                repr = self.encoder_q(input_ids=input, attention_mask=mask)
                 reprs.append(repr)
         reprs = torch.cat(reprs, dim = 0)
         return reprs
 
-    def _get_key_reprs(self, encoder, inputs, mask, use_normalize):
-        """Returns the representation of the keys."""
+    def _get_key_reprs(self, inputs, mask):
+        """Returns the representations of the keys."""
         reprs = []
         with torch.no_grad():
-            self._momentum_update_key_encoder()  # update the key encoder
+            self._momentum_update_key_encoder()  # Update the key encoder
             for input, mask in zip(inputs, mask):
-                if not encoder.training and not self.moco_train_mode_encoder_k:
-                    encoder.eval()
-                repr = encoder(input_ids=input, attention_mask=mask)  # keys: NxC
-                if use_normalize:
-                    repr = nn.functional.normalize(repr, dim=-1)
+                if not self.encoder_k.training and not self.moco_train_mode_encoder_k:
+                    self.encoder_k.eval()
+                repr = self.encoder_k(input_ids=input, attention_mask=mask)
                 reprs.append(repr)
         reprs = torch.cat(reprs, dim = 0)
         return reprs
 
-    def gather_tensor(self, t):
-        gathered = [torch.empty_like(t) for _ in range(self.word_size)]
+    def all_gather(self, t):
+        gathered = [torch.empty_like(t) for _ in range(self.world_size)]
         dist.all_gather(gathered, t)
         gathered[self.rank] = t
         return torch.cat(gathered, dim=0)
@@ -140,46 +161,69 @@ class MoCo(nn.Module):
         """Performs a gradient cached training step."""
         iter_stats = {}
         batch_size = q_tokens.shape[0]
-
-        # 0. Divide query and key tokens into a set of sub-batches each of which
+        # print("="*80)
+        # print("batch_size:", batch_size)
+        # print(f"q_tokens shape: {q_tokens.shape}")
+        # print(f"k_tokens shape: {k_tokens.shape}")
+        # 0. Divide query and key tokens into sets of micro-batches each of which
         # can fit into memory for gradient computation.
-        q̂_tokens = self._split_inputs(q_tokens, self.micro_batch_size)
-        q̂_mask = self._split_inputs(q_mask, self.micro_batch_size)
-        k̂_tokens = self._split_inputs(k_tokens, self.micro_batch_size)
-        k̂_mask = self._split_inputs(k_mask, self.micro_batch_size)
+        # shape: [batch_size, micro_batch_size, q_tokens_len]
+        q_micro_tokens = self._split_inputs(q_tokens, self.micro_batch_size)
+        q_micro_masks = self._split_inputs(q_mask, self.micro_batch_size)
+        # print(f"q_micro_tokens: {len(q_micro_tokens)}")
+        # print(f"q_micro_tokens shape: {q_micro_tokens[0].shape}")
+
+        # shape: [batch_size, micro_batch_size, k_tokens_len]
+        k_micro_tokens = self._split_inputs(k_tokens, self.micro_batch_size)
+        k_micro_masks = self._split_inputs(k_mask, self.micro_batch_size)
+        # print(f"k_micro_tokens: {len(k_micro_tokens)}")
+        # print(f"K_micro_tokens shape: {k_micro_tokens[0].shape}")
 
         # 1. Graph-less Forward: Run an extra encoder forward pass for each batch
-        # instance to get its representation. Collect and store.
-        q̂_reprs = self._get_query_reprs(
-            self.encoder_q, q̂_tokens, q̂_mask, self.norm_query)
-        k̂_reprs = self._get_key_reprs(
-            self.encoder_k, k̂_tokens, k̂_mask, self.norm_doc)
+        # instance to get its representation/embedding. (NO GRAPH CONSTUCTION)
+        q_reprs = self._get_query_reprs(q_micro_tokens, q_micro_masks)
+        print(f"q_reprs shape: {q_reprs.shape}")
+        k_reprs = self._get_key_reprs(k_micro_tokens, k_micro_masks)
+        # print(f"k_reprs shape: {k_reprs.shape}")
+
+        # 1a. When training on multi-GPU; we need to compute the gradients with
+        # all examples across all GPUs. This requires an all-gather to make
+        # representations available on all GPUs.
+        if dist.is_initialized():
+            print("All-gather-ing...")
+            q_reprs = self.all_gather(q_reprs)
+            k_reprs = self.all_gather(k_reprs)
+        print(f"q_reprs shape: {q_reprs.shape}")
 
         # 2. Representation Gradient Computation and Caching: Run backward-pass
-        # to populate gradients for each representation.
-        # NOTE: The encoders are not included in this gradient computation.
-        # because of the graph-less forward.
-        # NOTE: Only need the gradients for the query representations.
-        q̂_reprs = q̂_reprs.detach().requires_grad_()  # [repr.detach().requires_grad_() for repr in q̂_reprs], dim=0
-        logits = self._compute_logits(q̂_reprs, k̂_reprs) / self.temperature
-        labels = torch.zeros(batch_size, dtype=torch.long).cuda()  # positives are the 0-th
-        # TODO: Possibly add `with autocast():`
+        # to populate gradients for the query representations (δL / δencoder_q).
+        # NOTE: The encoders are not included in this gradient computation b/c the graph-less forward.
+        q_reprs = q_reprs.detach().requires_grad_()  # Remove `q_reprs` from encoder_q op graph.
+        logits = self._compute_logits(q_reprs, k_reprs) / self.temperature
+        print(f"logits: {logits.shape}")
+        # print(f"logits: {logits}")
+        labels = torch.zeros(q_reprs.size(0), dtype=torch.long).cuda()  # Positives are the 0-th
+        print(f"labels: {labels.shape}")
         loss = torch.nn.functional.cross_entropy(logits, labels, label_smoothing=self.label_smoothing)
         loss.backward()
-        q̂_repr_grad_cache = self._split_inputs(q̂_reprs.grad, self.micro_batch_size)
+        q_reprs_grad_cache = self._split_inputs(q_reprs.grad, self.micro_batch_size)
         loss = loss.detach()
+        # print(f"loss: {loss}")
 
-        # 3. Sub-batch Gradient Accumulation: 
-        for x, mask, repr_grad in zip(q̂_tokens, q̂_mask, q̂_repr_grad_cache):
+        # 3. Sub-batch Gradient Accumulation: Run the second forward and backward
+        # pass to compute gradient for the query encoder model.
+        for tokens, mask, repr_grad in zip(
+            q_micro_tokens, q_micro_masks, q_reprs_grad_cache
+        ):
             # Run encoder forward one sub-batch at a time to compute representations
-            # and build the corresponding computation graph. 
-            repr = self.encoder_q(input_ids=x, attention_mask=mask)
-            if self.norm_query:
-                repr = nn.functional.normalize(repr, dim=1)
+            # and build the corresponding computation graph.
+            repr = self.encoder_q(input_ids=tokens, attention_mask=mask)
             # Take the micro-batch’s representation gradients from the cache and
-            # run back-prop through the (query) encoder.
+            # run back-prop through the query encoder model.
             surrogate = torch.dot(repr.flatten(), repr_grad.flatten())
             surrogate.backward()
+
+        self._dequeue_and_enqueue(k_reprs)
 
         # Get stats for this step.
         if len(stats_prefix) > 0:
@@ -187,54 +231,11 @@ class MoCo(nn.Module):
         iter_stats[f'{stats_prefix}loss'] = (loss.item(), batch_size)
         predicted_idx = torch.argmax(logits, dim=-1)
         accuracy = 100 * (predicted_idx == labels).float().mean()
-        stdq = torch.std(q̂_reprs, dim=0).mean().item()
-        stdk = torch.std(k̂_reprs, dim=0).mean().item()
+        stdq = torch.std(q_reprs, dim=0).mean().item()
+        stdk = torch.std(k_reprs, dim=0).mean().item()
         iter_stats[f'{stats_prefix}accuracy'] = (accuracy, batch_size)
         iter_stats[f'{stats_prefix}stdq'] = (stdq, batch_size)
         iter_stats[f'{stats_prefix}stdk'] = (stdk, batch_size)
 
-        self._dequeue_and_enqueue(k̂_reprs)
-
+        print("="*80)
         return loss, iter_stats
-           
-    # def forward(self, q_tokens, q_mask, k_tokens, k_mask, stats_prefix='', **kwargs):
-    #     iter_stats = {}
-    #     batch_size = q_tokens.size(0)
-
-    #     q = self.encoder_q(input_ids=q_tokens, attention_mask=q_mask) # queries: NxC
-    #     if self.norm_query:
-    #         q = nn.functional.normalize(q, dim=1)
-
-    #     # compute key features
-    #     with torch.no_grad():  # no gradient to keys
-    #         self._momentum_update_key_encoder()  # update the key encoder
-
-    #         if not self.encoder_k.training and not self.moco_train_mode_encoder_k:
-    #             self.encoder_k.eval()
-
-    #         k = self.encoder_k(input_ids=k_tokens, attention_mask=k_mask)  # keys: NxC
-    #         if self.norm_doc:
-    #             k = nn.functional.normalize(k, dim=-1)
-
-    #     logits = self._compute_logits(q, k) / self.temperature
-
-    #     # labels: positive key indicators
-    #     labels = torch.zeros(batch_size, dtype=torch.long).cuda()
-
-    #     loss = torch.nn.functional.cross_entropy(logits, labels, label_smoothing=self.label_smoothing)
-
-        # if len(stats_prefix) > 0:
-        #     stats_prefix = stats_prefix + '/'
-        # iter_stats[f'{stats_prefix}loss'] = (loss.item(), batch_size)
-
-        # predicted_idx = torch.argmax(logits, dim=-1)
-        # accuracy = 100 * (predicted_idx == labels).float().mean()
-        # stdq = torch.std(q, dim=0).mean().item()
-        # stdk = torch.std(k, dim=0).mean().item()
-        # iter_stats[f'{stats_prefix}accuracy'] = (accuracy, batch_size)
-        # iter_stats[f'{stats_prefix}stdq'] = (stdq, batch_size)
-        # iter_stats[f'{stats_prefix}stdk'] = (stdk, batch_size)
-
-        # self._dequeue_and_enqueue(k)
-
-        # return loss, iter_stats

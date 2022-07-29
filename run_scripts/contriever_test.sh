@@ -9,8 +9,8 @@ TRAIN_PATH=/fsx/carper/contriever
 WANDB_PROJECT="contriever"
 WANDB_ENTITY="jon-tow"
 
-MICRO_BATCH_SIZE=2
-PER_GPU_BATCH_SIZE=64
+MICRO_BATCH_SIZE=8
+PER_GPU_BATCH_SIZE=32
 RMIN=0.05
 RMAX=0.5
 T=0.05
@@ -47,7 +47,7 @@ python3.8 test.py \
     --train_data $TRAIN_DATASETS --loading_mode split \
     --ratio_min $RMIN --ratio_max $RMAX --chunk_length 256 \
     --momentum $MOM --queue_size $QSIZE --temperature $T \
-    --warmup_steps 20000 --total_steps 500000 --lr 0.00005 \
+    --warmup_steps 20000 --total_steps 200 --lr 0.00005 \
     --scheduler linear \
     --optim adamw \
     --projection_size $PROJECTION_SIZE \
