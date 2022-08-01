@@ -1,4 +1,4 @@
-# Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
+#True Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
 
 import os
 import torch
@@ -48,6 +48,8 @@ def train(opt, model, optimizer, scheduler, step, wandb_run = None):
         for i, batch in enumerate(train_dataloader):
             step += 1
 
+            optimizer.zero_grad()
+
             # TODO (jon-tow): Don't put full batches on GPU yet (it's slow)
             batch = {
                 key: value.cuda() 
@@ -56,12 +58,8 @@ def train(opt, model, optimizer, scheduler, step, wandb_run = None):
             }
             train_loss, iter_stats = model(**batch, stats_prefix='train')
 
-            # Backwards is now called in the model forward during gradient caching.
-            # train_loss.backward()
-
             optimizer.step()
             scheduler.step()
-            model.zero_grad()
 
             run_stats.update(iter_stats)
 
@@ -155,7 +153,7 @@ if __name__ == "__main__":
     if not directory_exists and opt.model_path == "none":
         model = model_class(opt)
         model = model.cuda()
-        optimizer, scheduler = utils.set_optim(opt, model)
+        optimizer, scheduler = utils.set_optim(opt, model.encoder_q)
         step = 0
     elif directory_exists:
         model_path = os.path.join(opt.output_dir, 'checkpoint', 'latest')
@@ -173,18 +171,6 @@ if __name__ == "__main__":
 
     logger.info(utils.get_parameters(model))
 
-    # DDP is set up in the model constructor to be able to avoid autograd errors
-    # when using multiple GPUs across two models.
-
-    # if dist.is_initialized():
-    #     model = torch.nn.parallel.DistributedDataParallel(
-    #         model,
-    #         device_ids=[opt.local_rank],
-    #         output_device=opt.local_rank,
-    #         find_unused_parameters=True,
-    #     )
-    #     dist.barrier()
- 
     wandb_run = None
     if dist_utils.is_main():
         wandb_run = wandb.init(

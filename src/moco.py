@@ -39,15 +39,10 @@ class MoCo(nn.Module):
                 retriever.cuda(),
                 device_ids=[opt.local_rank],
                 output_device=opt.local_rank,
-                find_unused_parameters=True,
-            )
-            self.encoder_k = torch.nn.parallel.DistributedDataParallel(
-                copy.deepcopy(retriever).cuda(),
-                device_ids=[opt.local_rank],
-                output_device=opt.local_rank,
                 find_unused_parameters=False,
             )
             dist.barrier()
+            self.encoder_k = copy.deepcopy(retriever).cuda()
         else:
             self.encoder_q = retriever
             self.encoder_k = copy.deepcopy(retriever)
@@ -96,6 +91,7 @@ class MoCo(nn.Module):
         else:
             return self.encoder_q
 
+    @torch.no_grad()
     def _momentum_update_key_encoder(self):
         """
         Update of the key encoder
@@ -106,12 +102,14 @@ class MoCo(nn.Module):
     @torch.no_grad()
     def _dequeue_and_enqueue(self, keys):
         # gather keys before updating queue
-        keys = dist_utils.gather_nograd(keys.contiguous())
+        # `keys` are gathered in `step 2` of grad cache.
+        #keys = dist_utils.gather_nograd(keys.contiguous())
 
         batch_size = keys.shape[0]
+        print(batch_size)
 
         ptr = int(self.queue_ptr)
-        assert self.queue_size % batch_size == 0, f'{batch_size}, {self.queue_size}'  # for simplicity
+        assert self.queue_size % batch_size == 0, f'{self.queue_size}, {batch_size}'  # for simplicity
 
         # replace the keys at ptr (dequeue and enqueue)
         self.queue[:, ptr:ptr + batch_size] = keys.T
@@ -122,36 +120,38 @@ class MoCo(nn.Module):
     def _compute_logits(self, q, k):
         l_pos = torch.einsum('nc,nc->n', [q, k]).unsqueeze(-1)
         l_neg = torch.einsum('nc,ck->nk', [q, self.queue.clone().detach()]) 
-        logits = torch.cat([l_pos, l_neg], dim=1)
+        logits = torch.cat([l_pos, l_neg], dim=1)  # Positive is the first column for each sample.
         return logits
 
     def _split_inputs(self, inputs, size):
         return list(inputs.split(size, dim=0))
 
+    @torch.no_grad()
     def _get_query_reprs(self, inputs, masks):
         """Forward pass without gradient computation to record representations."""
         reprs = []
-        with torch.no_grad():
-            for input, mask in zip(inputs, masks):
-                repr = self.encoder_q(input_ids=input, attention_mask=mask)
-                reprs.append(repr)
+        for input, mask in zip(inputs, masks):
+            repr = self.encoder_q(input_ids=input, attention_mask=mask)
+            reprs.append(repr)
         reprs = torch.cat(reprs, dim = 0)
         return reprs
 
+    @torch.no_grad()
     def _get_key_reprs(self, inputs, mask):
         """Returns the representations of the keys."""
         reprs = []
-        with torch.no_grad():
-            self._momentum_update_key_encoder()  # Update the key encoder
-            for input, mask in zip(inputs, mask):
-                if not self.encoder_k.training and not self.moco_train_mode_encoder_k:
-                    self.encoder_k.eval()
-                repr = self.encoder_k(input_ids=input, attention_mask=mask)
-                reprs.append(repr)
+        self._momentum_update_key_encoder()  # Update the key encoder
+        for input, mask in zip(inputs, mask):
+            if not self.encoder_k.training and not self.moco_train_mode_encoder_k:
+                self.encoder_k.eval()
+            repr = self.encoder_k(input_ids=input, attention_mask=mask)
+            reprs.append(repr)
         reprs = torch.cat(reprs, dim = 0)
         return reprs
 
-    def all_gather(self, t):
+    @torch.no_grad()
+    def concat_all_gather(self, t):
+        """NOTE: `torch.distributed.all_gather` has no gradient."""
         gathered = [torch.empty_like(t) for _ in range(self.world_size)]
         dist.all_gather(gathered, t)
         gathered[self.rank] = t
@@ -161,67 +161,63 @@ class MoCo(nn.Module):
         """Performs a gradient cached training step."""
         iter_stats = {}
         batch_size = q_tokens.shape[0]
-        # print("="*80)
-        # print("batch_size:", batch_size)
-        # print(f"q_tokens shape: {q_tokens.shape}")
-        # print(f"k_tokens shape: {k_tokens.shape}")
+
         # 0. Divide query and key tokens into sets of micro-batches each of which
         # can fit into memory for gradient computation.
         # shape: [batch_size, micro_batch_size, q_tokens_len]
         q_micro_tokens = self._split_inputs(q_tokens, self.micro_batch_size)
         q_micro_masks = self._split_inputs(q_mask, self.micro_batch_size)
-        # print(f"q_micro_tokens: {len(q_micro_tokens)}")
-        # print(f"q_micro_tokens shape: {q_micro_tokens[0].shape}")
 
         # shape: [batch_size, micro_batch_size, k_tokens_len]
         k_micro_tokens = self._split_inputs(k_tokens, self.micro_batch_size)
         k_micro_masks = self._split_inputs(k_mask, self.micro_batch_size)
-        # print(f"k_micro_tokens: {len(k_micro_tokens)}")
-        # print(f"K_micro_tokens shape: {k_micro_tokens[0].shape}")
 
         # 1. Graph-less Forward: Run an extra encoder forward pass for each batch
         # instance to get its representation/embedding. (NO GRAPH CONSTUCTION)
         q_reprs = self._get_query_reprs(q_micro_tokens, q_micro_masks)
-        print(f"q_reprs shape: {q_reprs.shape}")
         k_reprs = self._get_key_reprs(k_micro_tokens, k_micro_masks)
-        # print(f"k_reprs shape: {k_reprs.shape}")
 
         # 1a. When training on multi-GPU; we need to compute the gradients with
         # all examples across all GPUs. This requires an all-gather to make
         # representations available on all GPUs.
         if dist.is_initialized():
-            print("All-gather-ing...")
-            q_reprs = self.all_gather(q_reprs)
-            k_reprs = self.all_gather(k_reprs)
-        print(f"q_reprs shape: {q_reprs.shape}")
+            q_reprs = self.concat_all_gather(q_reprs)
+            k_reprs = self.concat_all_gather(k_reprs)
+        # print(f"q_reprs shape: {q_reprs.shape}")
 
         # 2. Representation Gradient Computation and Caching: Run backward-pass
         # to populate gradients for the query representations (δL / δencoder_q).
         # NOTE: The encoders are not included in this gradient computation b/c the graph-less forward.
         q_reprs = q_reprs.detach().requires_grad_()  # Remove `q_reprs` from encoder_q op graph.
         logits = self._compute_logits(q_reprs, k_reprs) / self.temperature
-        print(f"logits: {logits.shape}")
-        # print(f"logits: {logits}")
-        labels = torch.zeros(q_reprs.size(0), dtype=torch.long).cuda()  # Positives are the 0-th
-        print(f"labels: {labels.shape}")
-        loss = torch.nn.functional.cross_entropy(logits, labels, label_smoothing=self.label_smoothing)
-        loss.backward()
+        labels = torch.zeros(logits.shape[0], dtype=torch.long).cuda()  # Positives are the 0-th
+        loss = torch.nn.functional.cross_entropy(
+            logits, labels, label_smoothing=self.label_smoothing)
+        loss.backward()  # This will trigger gradient synchronization across devices.
         q_reprs_grad_cache = self._split_inputs(q_reprs.grad, self.micro_batch_size)
         loss = loss.detach()
-        # print(f"loss: {loss}")
 
-        # 3. Sub-batch Gradient Accumulation: Run the second forward and backward
-        # pass to compute gradient for the query encoder model.
-        for tokens, mask, repr_grad in zip(
-            q_micro_tokens, q_micro_masks, q_reprs_grad_cache
+        # Only trigger gradient reduction across processes for the last micro-batch's
+        # forward-backward pass. See:
+        # https://pytorch.org/docs/stable/generated/torch.nn.parallel.DistributedDataParallel.html#torch.nn.parallel.DistributedDataParallel.no_sync
+        if dist.is_initialized():
+            sync_contexts = [self.encoder_q.no_sync for _ in range(len(q_micro_tokens) - 1)] + [nullcontext]
+        else:
+            sync_contexts = [nullcontext for _ in range(len(q_micro_tokens))]
+
+        # 3. Micro-batch Gradient Accumulation: Run the second forward and backward
+        # pass to compute gradient for the query encoder model (δencoder_q / δθ_q).
+        for tokens, mask, repr_grad, sync_context in zip(
+            q_micro_tokens, q_micro_masks, q_reprs_grad_cache, sync_contexts
         ):
-            # Run encoder forward one sub-batch at a time to compute representations
-            # and build the corresponding computation graph.
-            repr = self.encoder_q(input_ids=tokens, attention_mask=mask)
-            # Take the micro-batch’s representation gradients from the cache and
-            # run back-prop through the query encoder model.
-            surrogate = torch.dot(repr.flatten(), repr_grad.flatten())
-            surrogate.backward()
+            with sync_context():
+                # Run encoder forward one micro-batch at a time to compute representations
+                # and build the corresponding computation graph.
+                repr = self.encoder_q(input_ids=tokens, attention_mask=mask)
+                # Take the micro-batch’s representation gradients from the cache and
+                # run back-prop through the query encoder model.
+                surrogate = torch.dot(repr.flatten(), repr_grad.flatten())
+                surrogate.backward()
 
         self._dequeue_and_enqueue(k_reprs)
 
@@ -237,5 +233,4 @@ class MoCo(nn.Module):
         iter_stats[f'{stats_prefix}stdq'] = (stdq, batch_size)
         iter_stats[f'{stats_prefix}stdk'] = (stdk, batch_size)
 
-        print("="*80)
         return loss, iter_stats
