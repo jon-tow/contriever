@@ -1,3 +1,4 @@
+import builtins
 import os
 import torch
 import logging
@@ -43,19 +44,22 @@ def train(opt, model, optimizer, scheduler, step, wandb_run = None):
         for i, batch in enumerate(train_dataloader):
             step += 1
 
+            optimizer.zero_grad()
+
             # TODO (jon-tow): Don't put full batches on GPU yet (it's slow)
             batch = {
                 key: value.cuda() 
                 if isinstance(value, torch.Tensor) else value 
                 for key, value in batch.items()
             }
-            train_loss, _ = model.forward(**batch, stats_prefix='train')
-            
-            # train_loss.backward()
+
+            _, iter_stats = model(**batch, stats_prefix='train')
+
             optimizer.step()
             scheduler.step()
-            model.zero_grad()
-            raise RuntimeError("Stop")
+
+            if i > 10:
+                raise RuntimeError("Test Over")
 
 
 if __name__ == "__main__":
@@ -64,28 +68,43 @@ if __name__ == "__main__":
     opt = options.parse()
 
     torch.manual_seed(opt.seed)
-    slurm.init_distributed_mode(opt)
+    # Use `torchrun` manually
+    # slurm.init_distributed_mode(opt)
     slurm.init_signal_handler()
 
+    # Read environment variables when using torchrun
+    global_rank = int(os.environ['RANK'])
+    world_size = int(os.environ['WORLD_SIZE'])
+    local_rank = int(os.environ["LOCAL_RANK"])
+    opt.local_rank = local_rank
+
+    torch.cuda.set_device(local_rank)
+    dist.init_process_group(
+        init_method='env://',
+        backend='nccl',
+        world_size=world_size,
+        rank=global_rank,
+    )
+    # Set GPU device
+    if dist.is_initialized():
+        dist.barrier(device_ids=[local_rank])
+
+    # Suppress printing if not on master gpu
+    if global_rank != 0:
+        import builtins
+        def print_pass(*args):
+            pass
+        builtins.print = print_pass
 
     os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
     model_class = moco.MoCo
     model = model_class(opt)
     model = model.cuda()
-    optimizer, scheduler = utils.set_optim(opt, model)
+    # Only optimize the query encoder via the `optimizer` 
+    optimizer, scheduler = utils.set_optim(opt, model.encoder_q)
     step = 0
     logger.info(utils.get_parameters(model))
-
-    # Turn this off while testing
-    if dist.is_initialized():
-        model = torch.nn.parallel.DistributedDataParallel(
-            model,
-            device_ids=[opt.local_rank],
-            output_device=opt.local_rank,
-            find_unused_parameters=True,
-        )
-        dist.barrier()
-  
     logger.info("Start training")
     train(opt, model, optimizer, scheduler, step, None)
+    dist.destroy_process_group()

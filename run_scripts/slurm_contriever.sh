@@ -56,7 +56,7 @@ TRAIN_PATH=/fsx/carper/contriever
 WANDB_PROJECT="contriever"
 WANDB_ENTITY="carperai"
 
-PER_GPU_BATCH_SIZE=256
+PER_GPU_BATCH_SIZE=512
 MICRO_BATCH_SIZE=64
 QSIZE=65536 #131072 #262144
 MOM=0.9995
@@ -75,7 +75,8 @@ PROJECTION_SIZE=1024 # NOTE: Set this to hidden size from the model configs!
 EVAL_DATASETS=("nq msmarco")
 EVAL_DATASETS_DIR=${TRAIN_PATH}/BEIR/datasets/
 EVAL_FREQ=1000 # (in steps)
-NAME=$SLURM_JOB_ID-$POOL-rmin$RMIN-rmax$RMAX-T$T-$QSIZE-$MOM-$_MO-$AUG-$PAUG
+OPTIM=adamw
+NAME=$SLURM_JOB_ID-$POOL-$OPTIM-rmin$RMIN-rmax$RMAX-T$T-$QSIZE-$MOM-$_MO-$AUG-$PAUG
 
 OUTPUT_DIR=$TRAIN_PATH/checkpoint/pile/$NAME
 # NOTE: DATA_DIR must point to the directory specified in `tokenization_pile_script.sh`
@@ -103,7 +104,7 @@ srun --cpu_bind=v --accel-bind=gn python3.8 train.py \
     --momentum $MOM --queue_size $QSIZE --temperature $T \
     --warmup_steps 20000 --total_steps 500000 --lr 0.00005 \
     --scheduler linear \
-    --optim adamw \
+    --optim $OPTIM \
     --projection_size $PROJECTION_SIZE \
     --per_gpu_batch_size $PER_GPU_BATCH_SIZE \
     --micro_batch_size $MICRO_BATCH_SIZE \

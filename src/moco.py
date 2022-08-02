@@ -6,6 +6,7 @@ and `norm_doc` attributes in the MoCo class. It complicates? representation grad
 caching and is off by default in the original code.
 """
 
+import os
 import torch
 import torch.nn as nn
 import torch.distributed as dist
@@ -20,14 +21,16 @@ logger = logging.getLogger(__name__)
 
 class MoCo(nn.Module):
     def __init__(self, opt):
-        super(MoCo, self).__init__()
-
+        super().__init__()
         self.queue_size = opt.queue_size
         self.momentum = opt.momentum
         self.temperature = opt.temperature
         self.label_smoothing = opt.label_smoothing
         self.moco_train_mode_encoder_k = opt.moco_train_mode_encoder_k #apply the encoder on keys in train mode
         self.micro_batch_size = opt.micro_batch_size
+        if dist.is_initialized():
+            self.world_size = dist.get_world_size()
+            self.rank = dist.get_rank()
 
         retriever, tokenizer = self._load_retriever(opt)
         
@@ -41,8 +44,8 @@ class MoCo(nn.Module):
                 output_device=opt.local_rank,
                 find_unused_parameters=False,
             )
-            dist.barrier()
             self.encoder_k = copy.deepcopy(retriever).cuda()
+            dist.barrier()
         else:
             self.encoder_q = retriever
             self.encoder_k = copy.deepcopy(retriever)
@@ -50,10 +53,6 @@ class MoCo(nn.Module):
         for param_q, param_k in zip(self.encoder_q.parameters(), self.encoder_k.parameters()):
             param_k.data.copy_(param_q.data)
             param_k.requires_grad = False 
-
-        if dist.is_initialized():
-            self.world_size = dist.get_world_size()
-            self.rank = dist.get_rank()
 
         # create the queue
         self.register_buffer("queue", torch.randn(opt.projection_size, self.queue_size))
@@ -105,11 +104,10 @@ class MoCo(nn.Module):
     @torch.no_grad()
     def _dequeue_and_enqueue(self, keys):
         # gather keys before updating queue
-        # `keys` are gathered in `step 2` of grad cache.
+        # `keys` are gathered in `step 2` of grad cache .
         #keys = dist_utils.gather_nograd(keys.contiguous())
 
         batch_size = keys.shape[0]
-        print(batch_size)
 
         ptr = int(self.queue_ptr)
         assert self.queue_size % batch_size == 0, f'{self.queue_size}, {batch_size}'  # for simplicity
@@ -142,8 +140,8 @@ class MoCo(nn.Module):
     @torch.no_grad()
     def _get_key_reprs(self, inputs, mask):
         """Returns the representations of the keys."""
-        reprs = []
         self._momentum_update_key_encoder()  # Update the key encoder
+        reprs = []
         for input, mask in zip(inputs, mask):
             if not self.encoder_k.training and not self.moco_train_mode_encoder_k:
                 self.encoder_k.eval()
@@ -186,7 +184,6 @@ class MoCo(nn.Module):
         if dist.is_initialized():
             q_reprs = self.concat_all_gather(q_reprs)
             k_reprs = self.concat_all_gather(k_reprs)
-        # print(f"q_reprs shape: {q_reprs.shape}")
 
         # 2. Representation Gradient Computation and Caching: Run backward-pass
         # to populate gradients for the query representations (δL / δencoder_q).
