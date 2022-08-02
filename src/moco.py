@@ -55,8 +55,11 @@ class MoCo(nn.Module):
                 tokenizer.eos_token = "[SEP]"
             if 'bit' in opt.optim:
                 import bitsandbytes as bnb
-                retriever.embeddings.word_embeddings = bnb.nn.StableEmbedding(
+                stable_embedding = bnb.nn.StableEmbedding(
                     retriever.config.vocab_size, retriever.config.hidden_size)
+                with torch.no_grad():
+                    stable_embedding.weight.copy_(retriever.embeddings.word_embeddings.weight)
+                    retriever.embeddings.word_embeddings = stable_embedding
 
         retriever.config.pooling = opt.pooling
 
