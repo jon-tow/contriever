@@ -83,6 +83,7 @@ class Options():
         self.parser.add_argument('--maxload', type=int, default=None)
         self.parser.add_argument("--wandb_project", type=str, default='contriever')
         self.parser.add_argument("--wandb_entity", type=str, default='carperai')
+        self.parser.add_argument("--use_mixed_precision", action='store_true')
 
     def print_options(self, opt):
         message = ''

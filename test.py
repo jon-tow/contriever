@@ -52,14 +52,11 @@ def train(opt, model, optimizer, scheduler, step, wandb_run = None):
                 if isinstance(value, torch.Tensor) else value 
                 for key, value in batch.items()
             }
-
-            _, iter_stats = model(**batch, stats_prefix='train')
+            with torch.cuda.amp.autocast(True):
+                _, iter_stats = model(**batch, stats_prefix='train')
 
             optimizer.step()
             scheduler.step()
-
-            if i > 10:
-                raise RuntimeError("Test Over")
 
 
 if __name__ == "__main__":

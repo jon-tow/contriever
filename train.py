@@ -1,5 +1,6 @@
 #True Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
 
+from contextlib import nullcontext
 import os
 import torch
 import logging
@@ -16,7 +17,14 @@ from src import moco
 logger = logging.getLogger(__name__)
 
 
-def train(opt, model, optimizer, scheduler, step, wandb_run = None):
+def train(
+    opt,
+    model,
+    optimizer,
+    scheduler,
+    step,
+    wandb_run = None,
+):
     run_stats = utils.WeightedAvgStats()
 
     logger.info("Data loading")
@@ -38,28 +46,28 @@ def train(opt, model, optimizer, scheduler, step, wandb_run = None):
         collate_fn=collator
     )
 
-    epoch = 1
-
+    forward_context = torch.cuda.amp.autocast(True) if opt.use_mixed_precision else nullcontext
     model.train()
+
+    epoch = 1
     while step < opt.total_steps:
         train_dataset.generate_offset()
 
         logger.info(f'Start epoch {epoch}')
         for i, batch in enumerate(train_dataloader):
             step += 1
-
-            optimizer.zero_grad()
-
-            # TODO (jon-tow): Don't put full batches on GPU yet (it's slow)
             batch = {
                 key: value.cuda() 
                 if isinstance(value, torch.Tensor) else value 
                 for key, value in batch.items()
             }
-            train_loss, iter_stats = model(**batch, stats_prefix='train')
+
+            with forward_context:
+                _, iter_stats = model(**batch, stats_prefix='train')
 
             optimizer.step()
             scheduler.step()
+            optimizer.zero_grad()
 
             run_stats.update(iter_stats)
 
@@ -153,7 +161,7 @@ if __name__ == "__main__":
     if not directory_exists and opt.model_path == "none":
         model = model_class(opt)
         model = model.cuda()
-        optimizer, scheduler = utils.set_optim(opt, model.encoder_q)
+        optimizer, scheduler = utils.set_optim(opt, model)
         step = 0
     elif directory_exists:
         model_path = os.path.join(opt.output_dir, 'checkpoint', 'latest')

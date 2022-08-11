@@ -42,7 +42,7 @@ class MoCo(nn.Module):
                 retriever.cuda(),
                 device_ids=[opt.local_rank],
                 output_device=opt.local_rank,
-                find_unused_parameters=False,
+                find_unused_parameters=True,
             )
             self.encoder_k = copy.deepcopy(retriever).cuda()
             dist.barrier()
@@ -120,7 +120,7 @@ class MoCo(nn.Module):
 
     def _compute_logits(self, q, k):
         l_pos = torch.einsum('nc,nc->n', [q, k]).unsqueeze(-1)
-        l_neg = torch.einsum('nc,ck->nk', [q, self.queue.clone().detach()]) 
+        l_neg = q @ self.queue.clone().detach()
         logits = torch.cat([l_pos, l_neg], dim=1)  # Positive is the first column for each sample.
         return logits
 
