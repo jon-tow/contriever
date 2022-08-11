@@ -57,11 +57,14 @@ WANDB_PROJECT="contriever"
 WANDB_ENTITY="carperai"
 
 PER_GPU_BATCH_SIZE=64
+QSIZE=65536 #131072 #262144
+LR=0.00001
+LABEL_SMOOTHING=0.0
+WARMUP=20000
+MOM=0.9995
+T=0.05
 RMIN=0.05
 RMAX=0.5
-T=0.05
-QSIZE=131072
-MOM=0.9995
 POOL=average
 AUG=delete
 PAUG=0.1
@@ -71,10 +74,11 @@ TO=bert-base-uncased
 _MO=bert-large-uncased
 MO=$_MO              # For custom arch config use: ${TRAIN_PATH}/configs/$_MO/
 PROJECTION_SIZE=1024 # NOTE: Set this to hidden size from the model configs!
-EVAL_DATASETS=("nq msmarco")
+EVAL_DATASETS=("nq") # msmarco")
 EVAL_DATASETS_DIR=${TRAIN_PATH}/BEIR/datasets/
 EVAL_FREQ=1000 # (in steps)
-NAME=$SLURM_JOB_ID-$POOL-rmin$RMIN-rmax$RMAX-T$T-$QSIZE-$MOM-$_MO-$AUG-$PAUG
+OPTIM=adamw
+NAME=baseline-$SLURM_JOB_ID-$POOL-$OPTIM-bs$PER_GPU_BATCH_SIZE-smooth$LABEL_SMOOTHING-rmin$RMIN-rmax$RMAX-T$T-$QSIZE-$MOM-$_MO-$AUG-$PAUG
 
 OUTPUT_DIR=$TRAIN_PATH/checkpoint/pile/$NAME
 # NOTE: DATA_DIR must point to the directory specified in `tokenization_pile_script.sh`
@@ -100,9 +104,9 @@ srun --cpu_bind=v --accel-bind=gn python3.8 train.py \
     --eval_datasets $EVAL_DATASETS --eval_datasets_dir $EVAL_DATASETS_DIR --eval_freq $EVAL_FREQ \
     --ratio_min $RMIN --ratio_max $RMAX --chunk_length 256 \
     --momentum $MOM --queue_size $QSIZE --temperature $T \
-    --warmup_steps 20000 --total_steps 500000 --lr 0.00005 \
+    --warmup_steps $WARMUP --total_steps 500000 --lr $LR --label_smoothing $LABEL_SMOOTHING \
     --scheduler linear \
-    --optim adamw \
+    --optim $OPTIM \
     --projection_size $PROJECTION_SIZE \
     --per_gpu_batch_size $PER_GPU_BATCH_SIZE \
     --num_workers 6 \
@@ -110,4 +114,5 @@ srun --cpu_bind=v --accel-bind=gn python3.8 train.py \
     --main_port $MASTER_PORT \
     --main_addr $MASTER_ADDR \
     --wandb_project $WANDB_PROJECT \
-    --wandb_entity $WANDB_ENTITY
+    --wandb_entity $WANDB_ENTITY \
+    # --use_mixed_precision
