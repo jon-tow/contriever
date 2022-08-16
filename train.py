@@ -178,12 +178,15 @@ if __name__ == "__main__":
  
     wandb_run = None
     if dist_utils.is_main():
+
         wandb_run = wandb.init(
             project=opt.wandb_project,
             entity=opt.wandb_entity,
             save_code=False,
             force=False,
             name=opt.name,
+            resume=True,
+            id=opt.wandb_id,
         )
    
     logger.info("Start training")
