@@ -2,16 +2,16 @@
 #SBATCH --time=72:00:00
 #SBATCH --account=eleuther
 #SBATCH --job-name="contriever"
-#SBATCH --partition=compute-od-gpu
+#SBATCH --partition=gpu
 #SBATCH --cpus-per-task=6
 #SBATCH --nodes=4
 #SBATCH --ntasks-per-node=8
 #SBATCH --gres=gpu:8
 #SBATCH --exclusive
 #SBATCH --requeue
-#SBATCH --output=/fsx/carper/contriever/checkpoint/pile/%x_%j.out
+#SBATCH --output=/fsx/carper/contriever/checkpoint/pile/contriever_3756.out  # !!SPECIFY THIS 
 #SBATCH --open-mode=append
-#SBATCH --comment Eleuther
+#SBATCH --comment Eleuther 
 
 module load openmpi
 source /opt/intel/mpi/latest/env/vars.sh
@@ -57,11 +57,8 @@ echo "Host Names: $HOSTNAMES"
 
 TRAIN_PATH=/fsx/carper/contriever
 
-WANDB_PROJECT="contriever"
-WANDB_ENTITY="carperai"
-
 PER_GPU_BATCH_SIZE=64
-QSIZE=8192 #16384 #32768 #16384 #131072 #262144
+QSIZE=16384 #8192 #16384 #32768 #16384 #131072 #262144
 LR=0.00001
 LABEL_SMOOTHING=0.0
 WARMUP=20000
@@ -83,7 +80,13 @@ EVAL_DATASETS=("nq") # msmarco")
 EVAL_DATASETS_DIR=${TRAIN_PATH}/BEIR/datasets/
 EVAL_FREQ=1000 # (in steps)
 OPTIM=adamw
-NAME=baseline-$SLURM_JOB_ID-$POOL-$OPTIM-bs$PER_GPU_BATCH_SIZE-smooth$LABEL_SMOOTHING-rmin$RMIN-rmax$RMAX-T$T-$QSIZE-$MOM-$_MO-$AUG-$PAUG
+# NAME=baseline-$SLURM_JOB_ID-$POOL-$OPTIM-bs$PER_GPU_BATCH_SIZE-smooth$LABEL_SMOOTHING-rmin$RMIN-rmax$RMAX-T$T-$QSIZE-$MOM-$_MO-$AUG-$PAUG
+NAME=baseline-3756-average-adamw-bs64-smooth0.0-rmin0.05-rmax0.5-T0.05-16384-0.999-bert-large-uncased-delete-0.1
+
+WANDB_PROJECT="contriever"
+WANDB_ENTITY="carperai"
+WANDB_ID=204f1ohy
+
 OUTPUT_DIR=$TRAIN_PATH/checkpoint/pile/$NAME
 # NOTE: DATA_DIR must point to the directory specified in `tokenization_pile_script.sh`
 DATA_DIR=$TRAIN_PATH/encoded-data/bert-base-uncased
@@ -94,10 +97,8 @@ for i in 0{0..9} {10..29}; do
     TRAIN_DATASETS+="${DATA_DIR}/pile/${i} "
 done
 
-source $TRAIN_PATH/.env/bin/activate
 cd $TRAIN_PATH
-
-srun --cpu_bind=v --accel-bind=gn python3.8 train.py \
+source $TRAIN_PATH/.env/bin/activate && srun --comment Eleuther --cpu_bind=v --accel-bind=gn python3.8 train.py \
     --name $NAME \
     --model_path $MP \
     --sampling_coefficient $LC \
@@ -119,3 +120,5 @@ srun --cpu_bind=v --accel-bind=gn python3.8 train.py \
     --main_addr $MASTER_ADDR \
     --wandb_project $WANDB_PROJECT \
     --wandb_entity $WANDB_ENTITY \
+    --wandb_id $WANDB_ID
+    # --use_mixed_precision
