@@ -184,6 +184,8 @@ if __name__ == "__main__":
             save_code=False,
             force=False,
             name=opt.name,
+            resume=True,
+            id=opt.wandb_id,
         )
    
     logger.info("Start training")

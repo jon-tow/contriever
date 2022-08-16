@@ -22,7 +22,6 @@ class Options():
         self.parser.add_argument('--continue_training', action='store_true')
         self.parser.add_argument("--num_workers", type=int, default=5)
 
-
         self.parser.add_argument("--chunk_length", type=int, default=256)
         self.parser.add_argument("--loading_mode", type=str, default='split')
         self.parser.add_argument('--lower_case', action='store_true', help='perform evaluation after lowercasing')
@@ -82,6 +81,7 @@ class Options():
         self.parser.add_argument('--maxload', type=int, default=None)
         self.parser.add_argument("--wandb_project", type=str, default='contriever')
         self.parser.add_argument("--wandb_entity", type=str, default='carperai')
+        self.parser.add_argument("--wandb_id", type=str)
 
     def print_options(self, opt):
         message = ''
