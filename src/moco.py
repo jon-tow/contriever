@@ -96,7 +96,7 @@ class MoCo(nn.Module):
 
     def _compute_logits(self, q, k):
         l_pos = torch.einsum('nc,nc->n', [q, k]).unsqueeze(-1)
-        l_neg = q @ self.queue.clone().detach()
+        l_neg = torch.einsum('nc,ck->nk', [q, self.queue.clone().detach()])
         logits = torch.cat([l_pos, l_neg], dim=1)
         return logits
 
