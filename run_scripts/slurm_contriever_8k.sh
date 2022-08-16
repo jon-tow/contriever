@@ -76,7 +76,7 @@ TO=bert-base-uncased
 _MO=bert-large-uncased
 MO=$_MO              # For custom arch config use: ${TRAIN_PATH}/configs/$_MO/
 PROJECTION_SIZE=1024 # NOTE: Set this to hidden size from the model configs!
-EVAL_DATASETS=("nq") # msmarco")
+EVAL_DATASETS=("nq") # `msmarco` takes too long to validate on during training.
 EVAL_DATASETS_DIR=${TRAIN_PATH}/BEIR/datasets/
 EVAL_FREQ=1000 # (in steps)
 OPTIM=adamw
@@ -121,4 +121,3 @@ source $TRAIN_PATH/.env/bin/activate && srun --comment Eleuther --cpu_bind=v --a
     --wandb_project $WANDB_PROJECT \
     --wandb_entity $WANDB_ENTITY \
     --wandb_id $WANDB_ID
-    # --use_mixed_precision
