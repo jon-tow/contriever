@@ -49,8 +49,11 @@ def train(opt, model, optimizer, scheduler, step, wandb_run = None):
             step += 1
 
             batch = {key: value.cuda() if isinstance(value, torch.Tensor) else value for key, value in batch.items()}
+            # Store batch to get enough data for embedding logs
+            if step % opt.log_embed_freq == opt.log_embed_freq - 1:
+                log_batch = batch
+
             train_loss, iter_stats = model(**batch, stats_prefix='train')
-            
             train_loss.backward()
             optimizer.step()
 
@@ -58,6 +61,10 @@ def train(opt, model, optimizer, scheduler, step, wandb_run = None):
             model.zero_grad()
 
             run_stats.update(iter_stats)
+
+            if step % opt.log_embed_freq == 0:
+                utils.log_train_embed(opt, step, model, [batch, log_batch])
+                del log_batch
 
             if step % opt.log_freq == 0:
                 log = f'{step} / {opt.total_steps}'
@@ -96,6 +103,7 @@ def train(opt, model, optimizer, scheduler, step, wandb_run = None):
             if step > opt.total_steps:
                 break
         epoch += 1
+
 
 def evalmodel(opt, query_encoder, doc_encoder, tokenizer, wandb_run, step):
     for datasetname in opt.eval_datasets:

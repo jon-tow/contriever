@@ -20,7 +20,6 @@ class Options():
             help='Directory where eval datasets are stored')
         self.parser.add_argument('--model_path', type=str, default='none', help='path for retraining')
         self.parser.add_argument('--continue_training', action='store_true')
-        self.parser.add_argument("--num_workers", type=int, default=5)
 
         self.parser.add_argument("--chunk_length", type=int, default=256)
         self.parser.add_argument("--loading_mode", type=str, default='split')
@@ -62,6 +61,7 @@ class Options():
                             help="For distributed training: local_rank")
         self.parser.add_argument("--main_port", type=int, default=10001,
                             help="Master port (for multi-node SLURM jobs)")
+        self.parser.add_argument('--num_workers', type=int, default=1, help='Number of workers for data loading')
         self.parser.add_argument('--seed', type=int, default=0, help="random seed for initialization")
         # training parameters
         self.parser.add_argument('--optim', type=str, default='adamw')
@@ -75,6 +75,8 @@ class Options():
         self.parser.add_argument('--eps', type=float, default=1e-6, help='eps')
         self.parser.add_argument('--log_freq', type=int, default=100, 
                             help='log train stats every <log_freq> steps during training')
+        self.parser.add_argument('--log_embed_freq', type=int, default=1_000)
+        self.parser.add_argument('--log_embed_dir', type=str, default='./embeddings/')
         self.parser.add_argument('--eval_freq', type=int, default=500, 
                             help='evaluate model every <eval_freq> steps during training')
         self.parser.add_argument('--save_freq', type=int, default=50000) 

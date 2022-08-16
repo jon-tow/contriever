@@ -1,19 +1,5 @@
 #!/bin/bash
-#SBATCH --time=72:00:00
-#SBATCH --account=eleuther
-#SBATCH --job-name="contriever"
-#SBATCH --partition=gpu
-#SBATCH --cpus-per-task=6
-#SBATCH --nodes=4
-#SBATCH --ntasks-per-node=8
-#SBATCH --gres=gpu:8
-#SBATCH --exclusive
-#SBATCH --requeue
-#SBATCH --output=/fsx/carper/contriever/checkpoint/pile/contriever_3756.out  # !!SPECIFY THIS 
-#SBATCH --open-mode=append
-#SBATCH --comment Eleuther 
 
-module load openmpi
 source /opt/intel/mpi/latest/env/vars.sh
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/opt/nccl/build/lib:/opt/aws-ofi-nccl-install/lib
 export NCCL_PROTO=simple
@@ -26,9 +12,10 @@ export TORCH_CPP_LOG_LEVEL=INFO
 export TORCH_DISTRIBUTED_DEBUG=INFO
 export NCCL_DEBUG=info
 export NCCL_TREE_THRESHOLD=0
+export NCCL_SOCKET_IFNAME=eth0
+export NCCL_IB_DISABLE=1
+export NCCL_P2P_DISABLE=1
 export PYTHONFAULTHANDLER=1
-
-export CUDA_LAUNCH_BLOCKING=1
 
 export FI_EFA_FORK_SAFE=1
 export FI_LOG_LEVEL=1
@@ -57,13 +44,13 @@ echo "Host Names: $HOSTNAMES"
 
 TRAIN_PATH=/fsx/carper/contriever
 
-PER_GPU_BATCH_SIZE=64
-QSIZE=16384 #8192 #16384 #32768 #16384 #131072 #262144
-LR=0.00001
-LABEL_SMOOTHING=0.0
-WARMUP=20000
-CHUNKLEN=256
-MOM=0.999
+WANDB_PROJECT="contriever"
+WANDB_ENTITY="jon-tow"
+
+PER_GPU_BATCH_SIZE=512
+MICRO_BATCH_SIZE=32
+QSIZE=32768
+MOM=0.9995
 T=0.05
 RMIN=0.05
 RMAX=0.5
@@ -73,33 +60,24 @@ PAUG=0.1
 LC=0.
 MP=none
 TO=bert-base-uncased
-_MO=bert-large-uncased
-MO=$_MO              # For custom arch config use: ${TRAIN_PATH}/configs/$_MO/
-PROJECTION_SIZE=1024 # NOTE: Set this to hidden size from the model configs!
-EVAL_DATASETS=("nq") # `msmarco` takes too long to validate on during training.
-EVAL_DATASETS_DIR=${TRAIN_PATH}/BEIR/datasets/
+_MO=bert-base-uncased
+MO=$_MO              # For custom arch configs use: ${TRAIN_PATH}/configs/$_MO/
+PROJECTION_SIZE=768  # NOTE: Set this to hidden size from the model configs!
 EVAL_FREQ=1000 # (in steps)
 OPTIM=adamw
-# NAME=baseline-$SLURM_JOB_ID-$POOL-$OPTIM-bs$PER_GPU_BATCH_SIZE-smooth$LABEL_SMOOTHING-rmin$RMIN-rmax$RMAX-T$T-$QSIZE-$MOM-$_MO-$AUG-$PAUG
-NAME=baseline-3756-average-adamw-bs64-smooth0.0-rmin0.05-rmax0.5-T0.05-16384-0.999-bert-large-uncased-delete-0.1
-
-WANDB_PROJECT="contriever"
-WANDB_ENTITY="carperai"
-WANDB_ID=204f1ohy
+NAME=test-$SLURM_JOB_ID-$POOL-rmin$RMIN-rmax$RMAX-T$T-$QSIZE-$MOM-$_MO-$AUG-$PAUG
 
 OUTPUT_DIR=$TRAIN_PATH/checkpoint/pile/$NAME
 EMBED_DIR=$OUTPUT_DIR/embeddings
 # NOTE: DATA_DIR must point to the directory specified in `tokenization_pile_script.sh`
 DATA_DIR=$TRAIN_PATH/encoded-data/bert-base-uncased
 # NOTE: Uncomment the line below to test on 1 pile slice dataset
-#TRAIN_DATASETS=$DATA_DIR/pile/"00"
-TRAIN_DATASETS=""
-for i in 0{0..9} {10..29}; do
-    TRAIN_DATASETS+="${DATA_DIR}/pile/${i} "
-done
+TRAIN_DATASETS=$DATA_DIR/pile/"00"
 
+source $TRAIN_PATH/.env/bin/activate
 cd $TRAIN_PATH
-source $TRAIN_PATH/.env/bin/activate && srun --comment Eleuther --cpu_bind=v --accel-bind=gn python3.8 train.py \
+
+torchrun --standalone --nnodes=1 --nproc_per_node=8 test.py \
     --name $NAME \
     --model_path $MP \
     --sampling_coefficient $LC \
@@ -107,20 +85,15 @@ source $TRAIN_PATH/.env/bin/activate && srun --comment Eleuther --cpu_bind=v --a
     --retriever_tokenizer_id $TO \
     --augmentation $AUG --prob_augmentation $PAUG \
     --train_data $TRAIN_DATASETS --loading_mode split \
-    --eval_datasets $EVAL_DATASETS --eval_datasets_dir $EVAL_DATASETS_DIR --eval_freq $EVAL_FREQ \
-    --ratio_min $RMIN --ratio_max $RMAX --chunk_length $CHUNKLEN \
+    --ratio_min $RMIN --ratio_max $RMAX --chunk_length 256 \
     --momentum $MOM --queue_size $QSIZE --temperature $T \
-    --warmup_steps $WARMUP --total_steps 500000 --lr $LR --label_smoothing $LABEL_SMOOTHING \
+    --warmup_steps 20000 --total_steps 200 --lr 0.00005 \
     --scheduler linear \
     --optim $OPTIM \
     --projection_size $PROJECTION_SIZE \
     --per_gpu_batch_size $PER_GPU_BATCH_SIZE \
+    --micro_batch_size $MICRO_BATCH_SIZE \
     --num_workers 6 \
     --output_dir $OUTPUT_DIR \
-    --main_port $MASTER_PORT \
-    --main_addr $MASTER_ADDR \
-    --wandb_project $WANDB_PROJECT \
-    --wandb_entity $WANDB_ENTITY \
-    --wandb_id $WANDB_ID \
     --log_embed_dir $EMBED_DIR \
-    --log_embed_freq 1000 \
+    --log_embed_freq 2 \

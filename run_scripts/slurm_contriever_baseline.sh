@@ -1,13 +1,17 @@
 #!/bin/bash
 #SBATCH --time=72:00:00
+#SBATCH --account=eleuther
 #SBATCH --job-name="base-contriever"
-#SBATCH --partition=compute-od-gpu
+#SBATCH --partition=gpu
 #SBATCH --cpus-per-task=6
 #SBATCH --nodes=4
 #SBATCH --ntasks-per-node=8
 #SBATCH --gres=gpu:8
 #SBATCH --exclusive
 #SBATCH --output=/fsx/carper/contriever/checkpoint/pile/%x_%j.out
+#SBATCH --open-mode=append
+#SBATCH --comment Eleuther
+
 
 module load openmpi
 source /opt/intel/mpi/latest/env/vars.sh
@@ -71,12 +75,14 @@ TO=bert-base-uncased
 _MO=bert-base-uncased
 MO=$_MO
 PROJECTION_SIZE=768 # NOTE: Set this to hidden size from the model configs!
-EVAL_DATASETS=("nq msmarco")
+EVAL_DATASETS=("nq")
 EVAL_DATASETS_DIR=${TRAIN_PATH}/BEIR/datasets/
 EVAL_FREQ=1000 # (in steps)
-NAME=baseline-$SLURM_JOB_ID-$POOL-rmin$RMIN-rmax$RMAX-T$T-$QSIZE-$MOM-$_MO-$AUG-$PAUG
+# NAME=baseline-$SLURM_JOB_ID-$POOL-rmin$RMIN-rmax$RMAX-T$T-$QSIZE-$MOM-$_MO-$AUG-$PAUG
+NAME=baseline-445-average-rmin0.05-rmax0.5-T0.05-131072-0.9995-bert-base-uncased-delete-0.1
 
 OUTPUT_DIR=$TRAIN_PATH/checkpoint/pile/$NAME
+EMBED_DIR=$OUTPUT_DIR/embeddings
 # NOTE: DATA_DIR must point to the directory specified in `tokenization_pile_script.sh`
 DATA_DIR=$TRAIN_PATH/encoded-data/bert-base-uncased
 # NOTE: Uncomment the line below to test on 1 pile slice dataset
@@ -110,4 +116,6 @@ srun --cpu_bind=v --accel-bind=gn python3.8 train.py \
     --main_port $MASTER_PORT \
     --main_addr $MASTER_ADDR \
     --wandb_project $WANDB_PROJECT \
-    --wandb_entity $WANDB_ENTITY
+    --wandb_entity $WANDB_ENTITY \
+    --log_embed_dir $EMBED_DIR \
+    --log_embed_freq 2000 \

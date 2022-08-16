@@ -88,6 +88,7 @@ WANDB_ENTITY="carperai"
 WANDB_ID=20ylnpfy
 
 OUTPUT_DIR=$TRAIN_PATH/checkpoint/pile/$NAME
+EMBED_DIR=$OUTPUT_DIR/embeddings
 # NOTE: DATA_DIR must point to the directory specified in `tokenization_pile_script.sh`
 DATA_DIR=$TRAIN_PATH/encoded-data/bert-base-uncased
 # NOTE: Uncomment the line below to test on 1 pile slice dataset
@@ -120,4 +121,6 @@ source $TRAIN_PATH/.env/bin/activate && srun --comment Eleuther --cpu_bind=v --a
     --main_addr $MASTER_ADDR \
     --wandb_project $WANDB_PROJECT \
     --wandb_entity $WANDB_ENTITY \
-    --wandb_id $WANDB_ID
+    --wandb_id $WANDB_ID \
+    --log_embed_dir $EMBED_DIR \
+    --log_embed_freq 1000 \
