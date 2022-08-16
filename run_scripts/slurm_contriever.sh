@@ -83,7 +83,7 @@ EVAL_DATASETS=("nq") # `msmarco` takes too long to validate on during training.
 EVAL_DATASETS_DIR=${TRAIN_PATH}/BEIR/datasets/
 EVAL_FREQ=1000 # (in steps)
 OPTIM=adamw
-NAME=baseline-$SLURM_JOB_ID-$POOL-$OPTIM-bs$PER_GPU_BATCH_SIZE-smooth$LABEL_SMOOTHING-rmin$RMIN-rmax$RMAX-T$T-$QSIZE-$MOM-$_MO-$AUG-$PAUG
+NAME=$SLURM_JOB_ID-$POOL-$OPTIM-bs$PER_GPU_BATCH_SIZE-smooth$LABEL_SMOOTHING-rmin$RMIN-rmax$RMAX-T$T-$QSIZE-$MOM-$_MO-$AUG-$PAUG
 OUTPUT_DIR=$TRAIN_PATH/checkpoint/pile/$NAME
 # NOTE: DATA_DIR must point to the directory specified in `tokenization_pile_script.sh`
 DATA_DIR=$TRAIN_PATH/encoded-data/bert-base-uncased
