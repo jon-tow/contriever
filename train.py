@@ -4,6 +4,7 @@ import os
 import torch
 import logging
 import wandb
+from pathlib import Path
 
 import torch.distributed as dist
 from torch.utils.data import DataLoader, RandomSampler
@@ -37,6 +38,10 @@ def train(opt, model, optimizer, scheduler, step, wandb_run = None):
         num_workers=opt.num_workers, 
         collate_fn=collator
     )
+
+    log_embed_dir = Path(opt.log_embed_dir)
+    if not log_embed_dir.exists():
+        log_embed_dir.mkdir(parents=True, exist_ok=True)
 
     epoch = 1
 
