@@ -164,7 +164,7 @@ if __name__ == "__main__":
         model = model.cuda()
         optimizer, scheduler = utils.set_optim(opt, model)
         step = 0
-    elif directory_exists:
+    elif directory_exists and opt.model_path == "none":
         model_path = os.path.join(opt.output_dir, 'checkpoint', 'latest')
         model, optimizer, scheduler, opt_checkpoint, step = utils.load(
             model_class, model_path, opt, reset_params=False,
