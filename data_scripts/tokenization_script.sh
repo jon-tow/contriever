@@ -11,8 +11,8 @@ done
 NSPLIT=128 #Must be larger than the number of processes used during training
 FILENAME=$(basename "$input_file")
 INFILE="${input_file}"
-TOKENIZER=bert-base-uncased
-#TOKENIZER=bert-base-multilingual-cased
+#TOKENIZER=bert-base-uncased
+TOKENIZER=microsoft/deberta-v3-large
 SPLITDIR=./tmp-tokenization-${TOKENIZER}-${FILENAME}/
 OUTDIR=${output_dir}/encoded-data/${TOKENIZER}/pile/"$(basename "$FILENAME" | sed 's/\(.*\)\..*/\1/')"
 NPROCESS=8
@@ -27,7 +27,7 @@ for ((i=0;i<$NSPLIT;i++)); do
     num=$(printf "%03d\n" $i);
     FILE=${SPLITDIR}${num};
     #we used --normalize_text as an additional option for mContriever
-    python3 preprocess.py --tokenizer ${TOKENIZER} --datapath ${FILE} --outdir ${OUTDIR} &
+    python3.8 preprocess.py --tokenizer ${TOKENIZER} --datapath ${FILE} --outdir ${OUTDIR} &
     pids+=($!);
     if (( $i % $NPROCESS == 0 ))
     then

@@ -1,5 +1,12 @@
 #!/bin/bash
 
+export HF_HOME=/fsx/guac/.cache/huggingface
+export TRANSFORMERS_CACHE=/fsx/guac/.cache/huggingface/transformers
+
+TRAIN_PATH=/fsx/carper/contriever
+cd $TRAIN_PATH
+source $TRAIN_PATH/.env/bin/activate
+
 # Usage: 
 # sh tokenization_pile_script.sh -i {input_dir} -o {output_dir} -s {"train"|"val"|"test"}
 # -i: Input directory containing the uncompressed pile (`-s`) file(s) to be tokenized.

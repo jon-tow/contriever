@@ -48,9 +48,11 @@ def tokenize_file(args):
             print(f"File {savepath} already exists, exiting")
             return
     try:
-        tokenizer = transformers.AutoTokenizer.from_pretrained(args.tokenizer, local_files_only=True)
+        tokenizer = transformers.AutoTokenizer.from_pretrained(
+            args.tokenizer, local_files_only=True)
     except:
-        tokenizer = transformers.AutoTokenizer.from_pretrained(args.tokenizer, local_files_only=False)
+        tokenizer = transformers.AutoTokenizer.from_pretrained(
+            args.tokenizer, local_files_only=True)
     print(f"Encoding {args.datapath}...")
     tokens = apply_tokenizer(args.datapath, tokenizer, normalize_text=args.normalize_text)
 

@@ -3,10 +3,13 @@
 import os
 import sys
 import logging
-import torch
 import errno
 from typing import Union, Tuple, List, Dict
 from collections import defaultdict
+
+import torch
+import torch.distributed as dist
+import numpy as np
 
 from src import dist_utils
 
@@ -40,6 +43,35 @@ def symlink_force(target, link_name):
             os.symlink(target, link_name)
         else:
             raise e
+
+
+def log_train_embed(opt, step, model, batches, train_loss):
+    with torch.no_grad():
+        if isinstance(model, torch.nn.parallel.DistributedDataParallel):
+            encoder_q = model.module.get_encoder(return_encoder_k=False)
+            encoder_k = model.module.get_encoder(return_encoder_k=True)
+        else:
+            encoder_q = model.get_encoder(return_encoder_k=False)
+            encoder_k = model.get_encoder(return_encoder_k=True)
+        q_embeds = []
+        k_embeds = []
+        for batch in batches:
+            q_embeds.append(encoder_q(batch['q_tokens'], batch['q_mask']))
+            k_embeds.append(encoder_k(batch['k_tokens'], batch['k_mask']))
+        q_embed = torch.cat(q_embeds, dim=0)
+        k_embed = torch.cat(k_embeds, dim=0)
+        if dist.is_initialized():
+            q_embed = dist_utils.varsize_gather_nograd(q_embed)
+            k_embed = dist_utils.varsize_gather_nograd(k_embed)
+        q_embed = q_embed.cpu().numpy()
+        k_embed = k_embed.cpu().numpy()
+        if dist_utils.is_main():
+            q_embed_log_path = os.path.join(
+                opt.log_embed_dir, f'q_embed_step={step}_loss={train_loss}.npy')
+            k_embed_log_path = os.path.join(
+                opt.log_embed_dir, f'k_embed_step={step}_loss={train_loss}.npy')
+            np.save(q_embed_log_path, q_embed)
+            np.save(k_embed_log_path, k_embed)
 
 
 def save(model, optimizer, scheduler, step, opt, dir_path, name):
