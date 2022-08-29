@@ -68,7 +68,7 @@ def train(opt, model, optimizer, scheduler, step, wandb_run = None):
             run_stats.update(iter_stats)
 
             if step % opt.log_embed_freq == 0:
-                utils.log_train_embed(opt, step, model, [batch, log_batch])
+                utils.log_train_embed(opt, step, model, [batch, log_batch], train_loss)
                 del log_batch
 
             if step % opt.log_freq == 0:
@@ -197,8 +197,8 @@ if __name__ == "__main__":
             save_code=False,
             force=False,
             name=opt.name,
-            resume=True,
-            id=opt.wandb_id,
+            resume=True if opt.wandb_id is not None else False,
+            id=opt.wandb_id if opt.wandb_id is not None else None,
         )
    
     logger.info("Start training")

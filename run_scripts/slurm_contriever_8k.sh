@@ -11,7 +11,7 @@
 #SBATCH --requeue
 #SBATCH --output=/fsx/carper/contriever/checkpoint/pile/contriever_3810.out  # !!SPECIFY THIS 
 #SBATCH --open-mode=append
-#SBATCH --comment Eleuther 
+#SBATCH --comment eleuther 
 
 module load openmpi
 source /opt/intel/mpi/latest/env/vars.sh
@@ -99,7 +99,7 @@ for i in 0{0..9} {10..29}; do
 done
 
 cd $TRAIN_PATH
-source $TRAIN_PATH/.env/bin/activate && srun --comment Eleuther --cpu_bind=v --accel-bind=gn python3.8 train.py \
+source $TRAIN_PATH/.env/bin/activate && srun --comment eleuther --cpu_bind=v --accel-bind=gn python3.8 train.py \
     --name $NAME \
     --model_path $MP \
     --sampling_coefficient $LC \
@@ -123,4 +123,4 @@ source $TRAIN_PATH/.env/bin/activate && srun --comment Eleuther --cpu_bind=v --a
     --wandb_entity $WANDB_ENTITY \
     --wandb_id $WANDB_ID \
     --log_embed_dir $EMBED_DIR \
-    --log_embed_freq 1000 \
+    --log_embed_freq 10000 \

@@ -12,9 +12,6 @@ from beir.datasets.data_loader import GenericDataLoader
 from beir.retrieval.evaluation import EvaluateRetrieval
 from beir.retrieval.search.dense import DenseRetrievalExactSearch
 
-from beir.reranking.models import CrossEncoder
-from beir.reranking import Rerank
-
 import src.dist_utils as dist_utils
 from src import normalize_text
 

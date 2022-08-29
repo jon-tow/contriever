@@ -11,7 +11,8 @@
 #SBATCH --requeue
 #SBATCH --output=/fsx/carper/contriever/checkpoint/pile/contriever_3756.out  # !!SPECIFY THIS 
 #SBATCH --open-mode=append
-#SBATCH --comment Eleuther 
+#SBATCH --exclude=gpu-st-p4d-24xlarge-[1-229]
+#SBATCH --comment eleuther 
 
 module load openmpi
 source /opt/intel/mpi/latest/env/vars.sh
@@ -99,7 +100,7 @@ for i in 0{0..9} {10..29}; do
 done
 
 cd $TRAIN_PATH
-source $TRAIN_PATH/.env/bin/activate && srun --comment Eleuther --cpu_bind=v --accel-bind=gn python3.8 train.py \
+source $TRAIN_PATH/.env/bin/activate && srun --comment eleuther --cpu_bind=v --accel-bind=gn python3.8 train.py \
     --name $NAME \
     --model_path $MP \
     --sampling_coefficient $LC \
