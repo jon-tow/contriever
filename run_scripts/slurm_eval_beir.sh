@@ -63,7 +63,7 @@ source $TRAIN_PATH/.env/bin/activate
 
 /fsx/carper/contriever/.env
 model='checkpoint/pile/baseline-3756-average-adamw-bs64-smooth0.0-rmin0.05-rmax0.5-T0.05-16384-0.999-bert-large-uncased-delete-0.1/checkpoint/step-150000'
-dataset='arguana' #fiqa' 'trec-covid' 'webis-touche2020' 'dbpedia-entity' 'nfcorpus' 'fever' 'scidocs' 'scifact'
+dataset='msmarco' #'cqadupstack' 'quora' 'fever' 'hotpotqa' 'climate-fever' 'arguana' fiqa' 'trec-covid' 'webis-touche2020' 'dbpedia-entity' 'nfcorpus' 'scidocs' 'scifact'
 beir_dir=$TRAIN_PATH/BEIR
 
 source $TRAIN_PATH/.env/bin/activate  && srun --comment eleuther --cpu_bind=v --accel-bind=gn python3.8 eval_beir.py \

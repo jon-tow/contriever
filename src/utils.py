@@ -45,7 +45,7 @@ def symlink_force(target, link_name):
             raise e
 
 
-def log_train_embed(opt, step, model, batches):
+def log_train_embed(opt, step, model, batches, train_loss):
     with torch.no_grad():
         if isinstance(model, torch.nn.parallel.DistributedDataParallel):
             encoder_q = model.module.get_encoder(return_encoder_k=False)
@@ -65,12 +65,13 @@ def log_train_embed(opt, step, model, batches):
             k_embed = dist_utils.varsize_gather_nograd(k_embed)
         q_embed = q_embed.cpu().numpy()
         k_embed = k_embed.cpu().numpy()
-        q_embed_log_path = os.path.join(
-            opt.log_embed_dir, f'{step}_q_embed.npy')
-        k_embed_log_path = os.path.join(
-            opt.log_embed_dir, f'{step}_k_embed.npy')
-        np.save(q_embed_log_path, q_embed)
-        np.save(k_embed_log_path, k_embed)
+        if dist_utils.is_main():
+            q_embed_log_path = os.path.join(
+                opt.log_embed_dir, f'q_embed_step={step}_loss={train_loss}.npy')
+            k_embed_log_path = os.path.join(
+                opt.log_embed_dir, f'k_embed_step={step}_loss={train_loss}.npy')
+            np.save(q_embed_log_path, q_embed)
+            np.save(k_embed_log_path, k_embed)
 
 
 def save(model, optimizer, scheduler, step, opt, dir_path, name):
