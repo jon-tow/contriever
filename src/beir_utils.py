@@ -1,9 +1,9 @@
 # Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
 
 import os
-import glob
 from collections import defaultdict
 from typing import List, Dict
+from pathlib import Path
 import numpy as np
 import torch
 import torch.distributed as dist
@@ -186,9 +186,9 @@ def evaluate_model(
             if save_results_path is not None:
                 torch.save(results, f"{save_results_path}")
     elif dataset == 'cqadupstack': #compute macroaverage over datasets
-        paths = glob.glob(data_path)
-        for path in paths:
-            corpus, queries, qrels = GenericDataLoader(data_folder=data_folder).load(split=split)
+        paths = Path(data_path)
+        for path in paths.iterdir():
+            corpus, queries, qrels = GenericDataLoader(data_folder=str(path)).load(split=split)
             results = retriever.retrieve(corpus, queries)
             if is_main:
                 ndcg, _map, recall, precision = retriever.evaluate(qrels, results, retriever.k_values)
