@@ -124,4 +124,4 @@ source $TRAIN_PATH/.env/bin/activate && srun --comment eleuther --cpu_bind=v --a
     --wandb_entity $WANDB_ENTITY \
     --wandb_id $WANDB_ID \
     --log_embed_dir $EMBED_DIR \
-    --log_embed_freq 1000 \
+    --log_embed_freq 20000 \
