@@ -176,7 +176,9 @@ if __name__ == "__main__":
         )
         if not opt.continue_training:
             step = 0 
-        logger.info(f"Model loaded from {opt.model_path}")
+        # TODO: Fix utils.load to properly `step` and avoid this hard-coding
+        # step = 100_000
+        logger.info(f"Model loaded from {opt.model_path} on step {step}")
 
     logger.info(utils.get_parameters(model))
 
