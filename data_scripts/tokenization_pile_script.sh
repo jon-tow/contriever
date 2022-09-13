@@ -17,12 +17,13 @@ source $TRAIN_PATH/.env/bin/activate
 #     test.jsonl
 # -o: The ouput directory where the tokenized files will be stored.
 # -s: The split to be tokenized {"train"|"val"|"test"}.
-while getopts i:o:s: flag
+while getopts i:o:s:d: flag
 do
     case "${flag}" in
         i) input_dir=${OPTARG};;
         o) output_dir=${OPTARG};;
         s) split=${OPTARG};;
+        d) dataset=${OPTARG};;
     esac
 done
 
@@ -31,13 +32,13 @@ dir="$(dirname -- "$0")"
 if [ "$split" == "train" ]; then
     # for i in 0{0..9} {10..29} ; do
     for FILE in $input_dir/train/*; do
-        sh $dir/tokenization_script.sh -n $FILE -o $output_dir
+        sh $dir/tokenization_script.sh -n $FILE -o $output_dir -d $dataset
     done
 elif [ "$split" == "val" ]; then
-    sh $dir/tokenization_script.sh -n "${input_dir}/val.jsonl" -o $output_dir
+    sh $dir/tokenization_script.sh -n "${input_dir}/val.jsonl" -o $output_dir -d $dataset
 elif [ "$split" == "test" ]; then
-    sh $dir/tokenization_script.sh -n "${input_dir}/test.jsonl" -o $output_dir
+    sh $dir/tokenization_script.sh -n "${input_dir}/test.jsonl" -o $output_dir -d $dataset
 fi
 
 # Example:
-# sh tokenization_pile_script.sh -i /fsx/pile_raw -o /fsx/carper/contriever -s train
+# sh data_scripts/tokenization_pile_script.sh -i /fsx/pile_raw -o /fsx/carper/contriever -s train -d pile

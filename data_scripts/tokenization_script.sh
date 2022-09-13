@@ -1,20 +1,20 @@
 #!/bin/bash
 
 # Usage: sh tokenization_script.sh -n {input_file} -o {out_dir}
-while getopts n:o: flag
+while getopts n:o:d: flag
 do
     case "${flag}" in
         n) input_file=${OPTARG};;
         o) output_dir=${OPTARG};;
+        d) dataset=${OPTARG};;
     esac
 done
 NSPLIT=128 #Must be larger than the number of processes used during training
 FILENAME=$(basename "$input_file")
 INFILE="${input_file}"
-#TOKENIZER=bert-base-uncased
-TOKENIZER=microsoft/deberta-v3-large
+TOKENIZER=bert-base-uncased
 SPLITDIR=./tmp-tokenization-${TOKENIZER}-${FILENAME}/
-OUTDIR=${output_dir}/encoded-data/${TOKENIZER}/pile/"$(basename "$FILENAME" | sed 's/\(.*\)\..*/\1/')"
+OUTDIR=${output_dir}/encoded-data/${TOKENIZER}/${dataset}/"$(basename "$FILENAME" | sed 's/\(.*\)\..*/\1/')"
 NPROCESS=8
 
 mkdir -p ${SPLITDIR}
