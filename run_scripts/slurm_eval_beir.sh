@@ -3,13 +3,13 @@
 #SBATCH --account=eleuther
 #SBATCH --job-name="contriever"
 #SBATCH --partition=gpu
-#SBATCH --cpus-per-task=6
-#SBATCH --nodes=2
-#SBATCH --ntasks-per-node=8
+#SBATCH --cpus-per-task=8
+#SBATCH --nodes=4
+#SBATCH --ntasks-per-node=6
 #SBATCH --gres=gpu:8
 #SBATCH --exclusive
 #SBATCH --requeue
-#SBATCH --output=/fsx/carper/contriever/BEIR/contriever_3756_eval_%x_%j.out  # !!SPECIFY THIS 
+#SBATCH --output=/fsx/carper/contriever/BEIR/contriever%x_%j.out  # !!SPECIFY THIS 
 #SBATCH --exclude=gpu-st-p4d-24xlarge-[1-229]
 #SBATCH --comment eleuther 
 
@@ -61,9 +61,7 @@ TRAIN_PATH=/fsx/carper/contriever
 cd $TRAIN_PATH
 source $TRAIN_PATH/.env/bin/activate
 
-/fsx/carper/contriever/.env
-model='checkpoint/pile/baseline-3756-average-adamw-bs64-smooth0.0-rmin0.05-rmax0.5-T0.05-16384-0.999-bert-large-uncased-delete-0.1/checkpoint/step-150000'
-dataset='msmarco' #'cqadupstack' 'quora' 'fever' 'hotpotqa' 'climate-fever' 'arguana' fiqa' 'trec-covid' 'webis-touche2020' 'dbpedia-entity' 'nfcorpus' 'scidocs' 'scifact'
+dataset='scidocs' # 'nq' 'quora' 'fever' 'hotpotqa' 'climate-fever' 'arguana' fiqa' 'trec-covid' 'webis-touche2020' 'dbpedia-entity' 'nfcorpus' 'scidocs' 'scifact' 'cqadupstack'
 beir_dir=$TRAIN_PATH/BEIR
 
 source $TRAIN_PATH/.env/bin/activate  && srun --comment eleuther --cpu_bind=v --accel-bind=gn python3.8 eval_beir.py \
